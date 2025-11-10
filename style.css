@@ -137,6 +137,49 @@ body {
   text-transform: uppercase;
   color: #6b7280;
 }
+#typed-fieldset {
+    position: relative; /* so the button can anchor inside */
+}
+
+.typed-backspace-btn {
+    position: absolute;
+    right: 10px;
+    top: 3px; /* top-right inside Spell a Song */
+    transform: none;
+
+    padding: 0;
+    min-height: 0;
+
+    border: none;
+    background: transparent;
+    box-shadow: none;
+
+    font-family: var(--font-main);
+    font-size: 18px;
+
+    line-height: 1;
+    color: #111827;
+
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        transform var(--transition-fastEST),
+        opacity var(--transition-fast);
+}
+
+.typed-backspace-btn:hover:enabled {
+    color: #ef4444;
+    transform: translateY(-1px);
+}
+
+.typed-backspace-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+    transform: none;
+}
+
+
+
 
 #typed-text,
 #now-playing {

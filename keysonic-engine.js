@@ -64,6 +64,7 @@ let saveTypedBtn;
 let typedTextEl;
 let nowPlayingEl;
 let savedGridEl;
+let typedBackspaceBtn;
 
 let typedText = "";
 let nowPlayingChars = [];
@@ -103,6 +104,7 @@ export function initKeysonic() {
 
   tempoSlider = document.getElementById("tempo-slider");
   tempoValueEl = document.getElementById("tempo-value");
+  typedBackspaceBtn = document.getElementById("typed-backspace-btn");
 
   if (tempoSlider) {
     tempo = parseFloat(tempoSlider.value) || 1;
@@ -118,6 +120,10 @@ export function initKeysonic() {
       }
     });
   }
+
+  if (typedBackspaceBtn) {
+  typedBackspaceBtn.addEventListener("click", handleTypedBackspaceClick);
+}
 
   computeKeyOrder();
 
@@ -339,6 +345,18 @@ function handleSavedGridClick(e) {
   playSequence(entry.sequence, entry.name);
 }
 
+function handleTypedBackspaceClick() {
+  if (isRecording || isPlayingBack) return;
+  if (!typedText || typedText.length === 0) return;
+
+  // Remove last character from Spell a Song text
+  typedText = typedText.slice(0, -1);
+
+  syncTypedDisplay();
+  updateControls();
+}
+
+
 // ----- Playback Control -----
 
 function stopPlayback() {
@@ -379,6 +397,11 @@ function updateControls() {
   if (saveTypedBtn) {
     saveTypedBtn.disabled = !hasTyped || isRecording || isPlayingBack;
   }
+
+  if (typedBackspaceBtn) {
+  const canBackspace = hasTyped && !isRecording && !isPlayingBack;
+  typedBackspaceBtn.disabled = !canBackspace;
+}
 }
 
 function recordKeyStroke(code) {

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Keysonic</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Title pill -->
+    <div id="word-music-title">
+      <div class="keysonic-title-text">Keysonic</div>
+      <div id="word-music-subtitle">Every sentence is a song.</div>
+    </div>
+
+    <!-- Typed / Now Playing / Save Typed -->
+    <div id="word-display-container">
+      <fieldset id="typed-fieldset" class="word-block">
+        <legend>Spell a Song</legend>
+        <div id="typed-text"></div>
+      </fieldset>
+
+      <fieldset id="now-playing-fieldset" class="word-block">
+        <legend>Now Playing</legend>
+        <div id="now-playing"></div>
+      </fieldset>
+    </div>
+
+    <!-- Keyboard -->
+    <div id="word-music">
+      <div class="keyboard-wrapper">
+        <div id="keyboard-main" class="keyboard">
+          <div id="keyboard-main-rows" class="keyboard-main-rows"></div>
+        </div>
+        <div id="keyboard-numpad" class="keyboard"></div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div id="wm-controls">
+      <button data-action="record" id="record-btn">Record</button>
+      <button data-action="stop" id="stop-btn">Stop</button>
+      <button data-action="clear" id="clear-btn">Clear</button>
+      <button id="save-typed-btn" class="save-typed-btn">Save Word Song</button>
+      <label id="tempo-label" class="tempo-label">
+        Tempo
+        <input
+          id="tempo-slider"
+          type="range"
+          min="0.1"
+          max="3"
+          step="0.05"
+          value="1"
+        />
+        <span id="tempo-value">1.0x</span>
+      </label>
+      <label id="scale-label" class="scale-label">
+        Scale
+        <select id="scale-select"></select>
+      </label>
+    </div>
+
+    <!-- Saved recordings grid -->
+    <div id="wm-saved-grid"></div>
+
+    <script type="module" src="keysonic.js"></script>
+  </body>
+</html>

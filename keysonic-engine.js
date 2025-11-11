@@ -39,7 +39,6 @@ const ACTION_CODES = new Set([
 ]);
 
 // ----- State -----
-
 let isRecording = false;
 let isPlayingBack = false;
 let recordedSequence = [];
@@ -83,6 +82,7 @@ let currentScaleId = "major"; // default
 let rootFreq = 220; // keep your current baseline
 let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
+const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 
 // ----- Public Init -----
 
@@ -1113,114 +1113,7 @@ function applyPlaybackCardHighlight() {
   });
 }
 
-function getScaleContextForSpelling() {
-  // Try to infer the current scale/mood id/name from existing globals/helpers.
-  // This is defensive: it won't break if these don't exist.
-  if (typeof getCurrentScaleId === "function") {
-    return String(getCurrentScaleId() || "").toLowerCase();
-  }
-  if (typeof currentScaleId === "string") {
-    return currentScaleId.toLowerCase();
-  }
-  if (typeof currentScale === "string") {
-    return currentScale.toLowerCase();
-  }
-  if (typeof window !== "undefined") {
-    if (typeof window.currentScaleId === "string") {
-      return window.currentScaleId.toLowerCase();
-    }
-    if (typeof window.currentScale === "string") {
-      return window.currentScale.toLowerCase();
-    }
-  }
-  return "";
-}
-
-function preferFlatsForContext(ctx) {
-  // Heuristic:
-  // - If the mood/scale suggests darker / jazzy / flat keys, lean flats.
-  // - Otherwise default to sharps (bright major-ish feeling).
-  if (!ctx) return false;
-
-  if (
-    ctx.includes("flat") ||
-    ctx.includes("lofi") ||
-    ctx.includes("blues") ||
-    ctx.includes("blue") ||
-    ctx.includes("jazzy") ||
-    ctx.includes("dark") ||
-    ctx.includes("moody") ||
-    ctx.includes("minor")
-  ) {
-    return true;
-  }
-
-  // You can extend this list if you add explicit flat-key scale ids later.
-  return false;
-}
-
-function noteNameFromMidi(midi) {
-  const semitone = ((midi % 12) + 12) % 12;
-  const octave = Math.floor(midi / 12) - 1;
-
-  const ctx = getScaleContextForSpelling();
-  const useFlats = preferFlatsForContext(ctx);
-
-  // For white notes, same either way:
-  switch (semitone) {
-    case 0:  return "C"  + octave;
-    case 2:  return "D"  + octave;
-    case 4:  return "E"  + octave;
-    case 5:  return "F"  + octave;
-    case 7:  return "G"  + octave;
-    case 9:  return "A"  + octave;
-    case 11: return "B"  + octave;
-  }
-
-  // Black keys: choose enharmonic by context
-  if (semitone === 1) {  // C♯ / D♭
-    return (useFlats ? "D♭" : "C♯") + octave;
-  }
-  if (semitone === 3) {  // D♯ / E♭
-    return (useFlats ? "E♭" : "D♯") + octave;
-  }
-  if (semitone === 6) {  // F♯ / G♭
-    return (useFlats ? "G♭" : "F♯") + octave;
-  }
-  if (semitone === 8) {  // G♯ / A♭
-    return (useFlats ? "A♭" : "G♯") + octave;
-  }
-  if (semitone === 10) { // A♯ / B♭
-    return (useFlats ? "B♭" : "A♯") + octave;
-  }
-
-  // Fallback, should never hit
-  return "♪";
-}
-
-function getNoteGlyphForCode(code) {
-  // Treat the explicit " " token as spacebar for pitch purposes.
-  const effectiveCode = code === " " ? "Space" : code;
-
-  if (typeof getFrequencyForCode !== "function") {
-    return "♪";
-  }
-
-  const freq = getFrequencyForCode(effectiveCode);
-  if (!freq || !isFinite(freq) || freq <= 0) {
-    return "♪";
-  }
-
-  // Convert frequency to nearest MIDI note number
-  const midi = Math.round(69 + 12 * Math.log2(freq / 440));
-  if (!isFinite(midi)) {
-    return "♪";
-  }
-
-  // Map MIDI → context-aware note name (A♯ vs B♭, with octave)
-  const name = noteNameFromMidi(midi);
-  return name || "♪";
-}
+// musical symbols******************************************
 
 function spawnNoteParticleForKey(code) {
   let els = keyElements[code];
@@ -1263,4 +1156,252 @@ function spawnNoteParticleForKey(code) {
   setTimeout(() => {
     noteEl.remove();
   }, 1200);
+}
+
+function getScaleContextId() {
+  if (typeof getCurrentScaleId === "function") {
+    const v = getCurrentScaleId();
+    if (v) return String(v).toLowerCase();
+  }
+  if (typeof currentScaleId === "string") return currentScaleId.toLowerCase();
+  if (typeof currentScale === "string") return currentScale.toLowerCase();
+  if (typeof window !== "undefined") {
+    if (typeof window.currentScaleId === "string") {
+      return window.currentScaleId.toLowerCase();
+    }
+    if (typeof window.currentScale === "string") {
+      return window.currentScale.toLowerCase();
+    }
+  }
+  return "";
+}
+
+// Explicit preferences for some common keys.
+// Extend/align with your actual scale IDs as needed.
+const KEY_SIG_PREFS = {
+  c_major: { prefer: "natural" },
+  g_major: { prefer: "sharps" },
+  d_major: { prefer: "sharps" },
+  a_major: { prefer: "sharps" },
+  e_major: { prefer: "sharps" },
+  b_major: { prefer: "sharps" },
+  "f#_major": { prefer: "sharps" },
+  "c#_major": { prefer: "sharps" },
+  f_major: { prefer: "flats" },
+  bb_major: { prefer: "flats" },
+  eb_major: { prefer: "flats" },
+  ab_major: { prefer: "flats" },
+  db_major: { prefer: "flats" },
+  gb_major: { prefer: "flats" },
+  cb_major: { prefer: "flats" },
+
+  a_minor: { prefer: "natural" },
+  e_minor: { prefer: "sharps" },
+  b_minor: { prefer: "sharps" },
+  "f#_minor": { prefer: "sharps" },
+  "c#_minor": { prefer: "sharps" },
+  "g#_minor": { prefer: "sharps" },
+  "d#_minor": { prefer: "sharps" },
+
+  d_minor: { prefer: "flats" },
+  g_minor: { prefer: "flats" },
+  c_minor: { prefer: "flats" },
+  f_minor: { prefer: "flats" },
+  bb_minor: { prefer: "flats" },
+  eb_minor: { prefer: "flats" },
+  ab_minor: { prefer: "flats" },
+};
+
+function inferKeySigPreferenceFromContext(ctx) {
+  if (!ctx) return null;
+
+  if (KEY_SIG_PREFS[ctx]) return KEY_SIG_PREFS[ctx].prefer;
+
+  const m = ctx.match(/([a-g](?:b|#)?)[_\-](major|minor)/);
+  if (m) {
+    const keyId = (m[1] + "_" + m[2]).toLowerCase();
+    if (KEY_SIG_PREFS[keyId]) return KEY_SIG_PREFS[keyId].prefer;
+  }
+
+  // Fallback mood-based hints
+  if (
+    ctx.includes("flat") ||
+    ctx.includes("blue") ||
+    ctx.includes("blues") ||
+    ctx.includes("jazzy") ||
+    ctx.includes("dark") ||
+    ctx.includes("lofi") ||
+    ctx.includes("moody") ||
+    ctx.includes("minor")
+  ) {
+    return "flats";
+  }
+
+  return "sharps";
+}
+
+function noteNameFromMidi_Strict(midi) {
+  const semitone = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  const ctx = getScaleContextId();
+  const pref = inferKeySigPreferenceFromContext(ctx) || "sharps";
+
+  // Naturals
+  switch (semitone) {
+    case 0:
+      return "C" + octave;
+    case 2:
+      return "D" + octave;
+    case 4:
+      return "E" + octave;
+    case 5:
+      return "F" + octave;
+    case 7:
+      return "G" + octave;
+    case 9:
+      return "A" + octave;
+    case 11:
+      return "B" + octave;
+  }
+
+  // Accidentals based on key preference
+  if (semitone === 1) return (pref === "flats" ? "D♭" : "C♯") + octave;
+  if (semitone === 3) return (pref === "flats" ? "E♭" : "D♯") + octave;
+  if (semitone === 6) return (pref === "flats" ? "G♭" : "F♯") + octave;
+  if (semitone === 8) return (pref === "flats" ? "A♭" : "G♯") + octave;
+  if (semitone === 10) return (pref === "flats" ? "B♭" : "A♯") + octave;
+
+  return "♪";
+}
+
+function toSuperscriptDigits(num) {
+  const map = {
+    "-": "⁻",
+    0: "⁰",
+    1: "¹",
+    2: "²",
+    3: "³",
+    4: "⁴",
+    5: "⁵",
+    6: "⁶",
+    7: "⁷",
+    8: "⁸",
+    9: "⁹",
+  };
+  return String(num)
+    .split("")
+    .map((ch) => map[ch] || ch)
+    .join("");
+}
+
+//maybe later we export the "songs sentneces"
+function buildSongExportFromEntry(entry) {
+  if (!entry) return null;
+
+  const baseSeq =
+    Array.isArray(entry.playSequence) && entry.playSequence.length
+      ? entry.playSequence
+      : Array.isArray(entry.sequence)
+      ? entry.sequence
+      : [];
+
+  if (!baseSeq.length || typeof getFrequencyForCode !== "function") {
+    return null;
+  }
+
+  const keyId = getScaleContextId() || null;
+  const tempoBpm = typeof tempo === "number" && tempo > 0 ? tempo : 120;
+
+  const events = [];
+
+  for (let i = 0; i < baseSeq.length; i++) {
+    const rawCode = baseSeq[i];
+    const code = rawCode === " " ? "Space" : rawCode;
+
+    const freq = getFrequencyForCode(code);
+    if (!freq || !isFinite(freq) || freq <= 0) {
+      continue; // skip non-tonal / invalid
+    }
+
+    const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+    if (!isFinite(midi)) continue;
+
+    const name = noteNameFromMidi_Strict(midi);
+    if (!name || name === "♪") continue;
+
+    events.push({
+      step: i, // discrete position (0,1,2,...) at SONG_STEP_NOTE_VALUE each
+      midi,
+      note: name, // e.g. "C♯4" or "B♭3"
+      // dynamics / articulations could be added here later in a deterministic way
+    });
+  }
+
+  if (!events.length) return null;
+
+  return {
+    id: entry.id,
+    name: entry.name,
+    key: keyId,
+    tempo: tempoBpm,
+    stepNoteValue: SONG_STEP_NOTE_VALUE,
+    events,
+  };
+}
+
+function getNoteGlyphForCode(code) {
+  const effectiveCode = code === " " ? "Space" : code;
+
+  if (typeof getFrequencyForCode !== "function") {
+    return "♪";
+  }
+
+  const freq = getFrequencyForCode(effectiveCode);
+  if (!freq || !isFinite(freq) || freq <= 0) {
+    return "♪";
+  }
+
+  const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+  if (!isFinite(midi)) {
+    return "♪";
+  }
+
+  const strictName = noteNameFromMidi_Strict(midi); // e.g. "A♯4" / "B♭3" / "C4"
+  if (!strictName || strictName === "♪") {
+    return "♪";
+  }
+
+  // Parse into base, accidental, octave
+  let base = "";
+  let accidental = "";
+  let octaveStr = "";
+
+  for (const ch of strictName) {
+    if (ch === "♯" || ch === "♭") {
+      accidental = ch;
+    } else if ((ch >= "0" && ch <= "9") || ch === "-") {
+      octaveStr += ch;
+    } else {
+      base += ch;
+    }
+  }
+
+  const octaveSup = octaveStr ? toSuperscriptDigits(octaveStr) : "";
+
+  // Rhythmic symbol is tied to SONG_STEP_NOTE_VALUE so view == export.
+  let noteHead = "♪"; // default eighth
+  if (SONG_STEP_NOTE_VALUE === "quarter") noteHead = "♩";
+  else if (SONG_STEP_NOTE_VALUE === "eighth") noteHead = "♪";
+  else if (SONG_STEP_NOTE_VALUE === "sixteenth") noteHead = "♫";
+
+  // If you want dynamics or articulations later, compute them deterministically
+  // from sequence context / card metadata and ALSO store them in buildSongExportFromEntry.
+  // For now we keep this clean & strictly reproducible: pitch + fixed rhythmic unit.
+  // Example glyph: ♪C♯⁴, ♩B♭³, ♫G⁵
+
+  let glyph = noteHead + base;
+  if (accidental) glyph += accidental;
+  if (octaveSup) glyph += octaveSup;
+
+  return glyph || "♪";
 }

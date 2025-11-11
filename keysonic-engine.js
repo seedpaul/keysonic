@@ -786,7 +786,6 @@ function resetTypedText() {
   updateControls();
 }
 
-
 function updateTypedTextForUserKey(code) {
   // View-only mapping: what character should appear in "Spell a Song"?
   const ch = mapCodeToCharForTyping(code);
@@ -1087,6 +1086,7 @@ function triggerKey(code, { fromPlayback = false } = {}) {
   // - everything gets its tone as usual
   playTone(code);
   flashKey(code);
+  spawnNoteParticleForKey(code);
 }
 
 function makeId() {
@@ -1111,4 +1111,156 @@ function applyPlaybackCardHighlight() {
     const isPlayingCard = currentPlaybackId && id === currentPlaybackId;
     card.classList.toggle("playing", !!isPlayingCard);
   });
+}
+
+function getScaleContextForSpelling() {
+  // Try to infer the current scale/mood id/name from existing globals/helpers.
+  // This is defensive: it won't break if these don't exist.
+  if (typeof getCurrentScaleId === "function") {
+    return String(getCurrentScaleId() || "").toLowerCase();
+  }
+  if (typeof currentScaleId === "string") {
+    return currentScaleId.toLowerCase();
+  }
+  if (typeof currentScale === "string") {
+    return currentScale.toLowerCase();
+  }
+  if (typeof window !== "undefined") {
+    if (typeof window.currentScaleId === "string") {
+      return window.currentScaleId.toLowerCase();
+    }
+    if (typeof window.currentScale === "string") {
+      return window.currentScale.toLowerCase();
+    }
+  }
+  return "";
+}
+
+function preferFlatsForContext(ctx) {
+  // Heuristic:
+  // - If the mood/scale suggests darker / jazzy / flat keys, lean flats.
+  // - Otherwise default to sharps (bright major-ish feeling).
+  if (!ctx) return false;
+
+  if (
+    ctx.includes("flat") ||
+    ctx.includes("lofi") ||
+    ctx.includes("blues") ||
+    ctx.includes("blue") ||
+    ctx.includes("jazzy") ||
+    ctx.includes("dark") ||
+    ctx.includes("moody") ||
+    ctx.includes("minor")
+  ) {
+    return true;
+  }
+
+  // You can extend this list if you add explicit flat-key scale ids later.
+  return false;
+}
+
+function noteNameFromMidi(midi) {
+  const semitone = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+
+  const ctx = getScaleContextForSpelling();
+  const useFlats = preferFlatsForContext(ctx);
+
+  // For white notes, same either way:
+  switch (semitone) {
+    case 0:  return "C"  + octave;
+    case 2:  return "D"  + octave;
+    case 4:  return "E"  + octave;
+    case 5:  return "F"  + octave;
+    case 7:  return "G"  + octave;
+    case 9:  return "A"  + octave;
+    case 11: return "B"  + octave;
+  }
+
+  // Black keys: choose enharmonic by context
+  if (semitone === 1) {  // C♯ / D♭
+    return (useFlats ? "D♭" : "C♯") + octave;
+  }
+  if (semitone === 3) {  // D♯ / E♭
+    return (useFlats ? "E♭" : "D♯") + octave;
+  }
+  if (semitone === 6) {  // F♯ / G♭
+    return (useFlats ? "G♭" : "F♯") + octave;
+  }
+  if (semitone === 8) {  // G♯ / A♭
+    return (useFlats ? "A♭" : "G♯") + octave;
+  }
+  if (semitone === 10) { // A♯ / B♭
+    return (useFlats ? "B♭" : "A♯") + octave;
+  }
+
+  // Fallback, should never hit
+  return "♪";
+}
+
+function getNoteGlyphForCode(code) {
+  // Treat the explicit " " token as spacebar for pitch purposes.
+  const effectiveCode = code === " " ? "Space" : code;
+
+  if (typeof getFrequencyForCode !== "function") {
+    return "♪";
+  }
+
+  const freq = getFrequencyForCode(effectiveCode);
+  if (!freq || !isFinite(freq) || freq <= 0) {
+    return "♪";
+  }
+
+  // Convert frequency to nearest MIDI note number
+  const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+  if (!isFinite(midi)) {
+    return "♪";
+  }
+
+  // Map MIDI → context-aware note name (A♯ vs B♭, with octave)
+  const name = noteNameFromMidi(midi);
+  return name || "♪";
+}
+
+function spawnNoteParticleForKey(code) {
+  let els = keyElements[code];
+
+  // Handle the explicit space token as the spacebar key visually.
+  if ((!els || !els.length) && (code === " " || code === "Space")) {
+    els = keyElements["Space"];
+  }
+
+  if (!els || !els.length) return;
+
+  const keyEl = els[0];
+  const rect = keyEl.getBoundingClientRect();
+
+  const glyph = getNoteGlyphForCode(code);
+  if (!glyph) return;
+
+  const noteEl = document.createElement("div");
+  noteEl.className = "note-float";
+  noteEl.textContent = glyph;
+
+  // Color: match the key’s hue if present, otherwise let CSS default handle it
+  const hue = parseFloat(keyEl.dataset.hue);
+  if (!isNaN(hue)) {
+    // Slightly brighter than base, not as strong as active.
+    noteEl.style.color = `hsl(${hue}, 92%, 64%)`;
+  }
+
+  // Horizontal flutter: small random offset left/right.
+  const dx = (Math.random() * 26 - 13).toFixed(1) + "px";
+  noteEl.style.setProperty("--dx", dx);
+
+  // Position at top-center of key
+  noteEl.style.left = `${rect.left + rect.width / 2}px`;
+  noteEl.style.top = `${rect.top}px`;
+
+  document.body.appendChild(noteEl);
+
+  // Clean up after animation
+  setTimeout(() => {
+    noteEl.remove();
+  }, 1200);
 }

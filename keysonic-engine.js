@@ -45,10 +45,12 @@ let isPlayingBack = false;
 let recordedSequence = [];
 
 let playbackTimeoutId = null;
-let playbackSequence = null;
-let playbackReversed = false;
-let playbackIndex = 0;
-let playbackLabel = "";
+let playbackSequence = null; // the base sequence, always in forward order
+let playbackIndex = 0; // index of the NEXT note to play
+let playbackLabel = ""; // the word/name shown in Now Playing
+let playbackReversed = false; // are we currently moving backwards?
+let playbackStep = 0; // how many notes have been played in this run
+let currentPlaybackId = null; // which card (id) is currently playing, if any
 
 let keyOrder = [];
 let keyElements = {};
@@ -66,8 +68,6 @@ let typedTextEl;
 let nowPlayingEl;
 let savedGridEl;
 let typedBackspaceBtn;
-
-let currentPlaybackId = null;
 
 let typedText = "";
 let nowPlayingChars = [];
@@ -193,8 +193,6 @@ export function initKeysonic() {
   updateControls();
 }
 
-// ----- Wiring -----
-
 function wireAudioUnlock() {
   window.addEventListener("click", handleFirstInteraction, { once: true });
   window.addEventListener("keydown", handleFirstInteraction, { once: true });
@@ -221,8 +219,6 @@ function wireControlEvents() {
     savedGridEl.addEventListener("click", handleSavedGridClick);
   }
 }
-
-// ----- Event Handlers -----
 
 function handleFirstInteraction() {
   if (audioCtx && audioCtx.state === "suspended") {
@@ -383,10 +379,29 @@ function handleSavedGridClick(e) {
     applyColorsToSavedTitles();
     applyPlaybackCardHighlight();
 
-    // If THIS card is currently playing, restart playback with new direction
-    if (isPlayingBack && currentPlaybackId === id) {
-      stopPlayback();
-      playSequence(entry.sequence, entry.name, id, !!entry.reverse);
+    // If THIS card is currently playing, flip direction in-place
+    if (
+      isPlayingBack &&
+      currentPlaybackId === id &&
+      playbackSequence &&
+      playbackSequence.length
+    ) {
+      const len = playbackSequence.length;
+      const oldDir = playbackReversed ? -1 : 1;
+      const newReversed = !!entry.reverse;
+      const newDir = newReversed ? -1 : 1;
+
+      if (oldDir !== newDir) {
+        // lastPlayed = index we just played
+        const lastPlayed = (((playbackIndex - oldDir) % len) + len) % len;
+        playbackReversed = newReversed;
+
+        // next note should be one step in the new direction from lastPlayed
+        playbackIndex = (lastPlayed + newDir + len) % len;
+        // do NOT reset playbackStep; highlight progression continues smoothly
+      } else {
+        playbackReversed = newReversed;
+      }
     }
 
     e.stopPropagation();
@@ -415,8 +430,6 @@ function handleTypedBackspaceClick() {
   updateControls();
 }
 
-// ----- Playback Control -----
-
 function stopPlayback() {
   if (playbackTimeoutId !== null) {
     clearTimeout(playbackTimeoutId);
@@ -427,15 +440,20 @@ function stopPlayback() {
   playbackSequence = null;
   playbackIndex = 0;
   playbackLabel = "";
-  currentPlaybackId = null;
   playbackReversed = false;
+  playbackStep = 0;
+  currentPlaybackId = null;
 
   nowPlayingChars = setNowPlaying(nowPlayingEl, "");
   updateControls();
   applyPlaybackCardHighlight();
 }
 
-// ----- Recording & Controls -----
+function shouldLoopCurrent() {
+  if (!currentPlaybackId) return false;
+  const rec = savedRecordings.find((r) => r.id === currentPlaybackId);
+  return !!(rec && rec.loop);
+}
 
 function updateControls() {
   const hasNotes = recordedSequence.length > 0;
@@ -482,16 +500,18 @@ function playSequence(sequence, label, playbackId = null, reversed = false) {
   isPlayingBack = true;
   isRecording = false;
 
-  playbackSequence = reversed ? sequence.slice().reverse() : sequence.slice();
-
-  playbackIndex = 0;
+  playbackSequence = sequence.slice();             // keep as-is, forward
   playbackLabel = label != null ? String(label) : "";
   playbackReversed = !!reversed;
+  playbackStep = 0;
+
+  const len = playbackSequence.length;
+  playbackIndex = playbackReversed ? len - 1 : 0;  // start at end if reversed
 
   if (playbackId) currentPlaybackId = playbackId;
 
   nowPlayingChars = setNowPlaying(nowPlayingEl, playbackLabel);
-  if (playbackSequence.length) {
+  if (len) {
     updateNowPlayingColors(nowPlayingChars, playbackSequence);
   }
 
@@ -502,7 +522,6 @@ function playSequence(sequence, label, playbackId = null, reversed = false) {
 }
 
 function queueNextPlaybackStep() {
-  // If playback was stopped externally or sequence vanished, clean up.
   if (!isPlayingBack || !playbackSequence) {
     stopPlayback();
     return;
@@ -514,61 +533,66 @@ function queueNextPlaybackStep() {
     return;
   }
 
-  if (playbackIndex >= seqLen) {
-    // Check if the currently playing recording is marked as looping
-    let shouldLoop = false;
-    if (currentPlaybackId) {
-      const rec = savedRecordings.find((r) => r.id === currentPlaybackId);
-      if (rec && rec.loop) {
-        shouldLoop = true;
-      }
-    }
-
-    if (shouldLoop) {
-      // Restart from beginning for this same sequence
-      playbackIndex = 0;
-
-      const baseStep = 220;
-      const step = baseStep / (tempo || 1);
-      playbackTimeoutId = setTimeout(queueNextPlaybackStep, step);
+  // If we're out of bounds, decide whether to loop or end.
+  if (playbackIndex < 0 || playbackIndex >= seqLen) {
+    if (!shouldLoopCurrent || !shouldLoopCurrent()) {
+      const tail = 200 / (tempo || 1);
+      playbackTimeoutId = setTimeout(() => {
+        stopPlayback();
+      }, tail);
       return;
     }
 
-    // No loop: small tail, then stop
-    const tail = 200 / (tempo || 1);
-    playbackTimeoutId = setTimeout(() => {
-      stopPlayback();
-    }, tail);
-    return;
+    // Wrap for looping based on current direction
+    playbackIndex = playbackReversed ? seqLen - 1 : 0;
   }
 
-  const code = playbackSequence[playbackIndex];
+  // Use a stable local index for this step
+  const currentIndex = playbackIndex;
+  const code = playbackSequence[currentIndex];
 
-  // Play this step using the *current* scale & tempo
+  // Play this note (keys + audio)
   triggerKey(code, { fromPlayback: true });
 
+  // ----- NOW PLAYING HIGHLIGHT -----
+  // Match the visual highlight to the same logical index we're using for notes.
   if (playbackLabel && nowPlayingChars && nowPlayingChars.length) {
-    const labelLen = playbackLabel.length;
-    const stepIndex = playbackIndex % labelLen;
+    const charCount = nowPlayingChars.length;
 
-    const hi = playbackReversed
-      ? labelLen - 1 - stepIndex // walk from right to left when reversed
-      : stepIndex; // normal left to right
+    if (charCount > 0) {
+      let hi;
 
-    updateNowPlayingColors(nowPlayingChars, playbackSequence);
-    highlightNowPlayingIndex(nowPlayingChars, hi);
+      if (seqLen === charCount) {
+        // 1:1: note index maps directly to character index
+        hi = currentIndex;
+      } else {
+        // Different lengths: map proportionally so it feels aligned
+        const denom = Math.max(seqLen - 1, 1);
+        hi = Math.round((currentIndex / denom) * (charCount - 1));
+      }
+
+      // Clamp into range
+      if (hi < 0) hi = 0;
+      if (hi >= charCount) hi = charCount - 1;
+
+      updateNowPlayingColors(nowPlayingChars, playbackSequence);
+      highlightNowPlayingIndex(nowPlayingChars, hi);
+    }
+  }
+  // ----- END HIGHLIGHT -----
+
+  // Advance index for the NEXT step based on current direction.
+  if (playbackReversed) {
+    playbackIndex = currentIndex - 1;
+  } else {
+    playbackIndex = currentIndex + 1;
   }
 
-  playbackIndex += 1;
-
-  // Schedule the next step using the CURRENT tempo
+  // Schedule next step using live tempo
   const baseStep = 220;
-  const step = baseStep / (tempo || 1);
-
-  playbackTimeoutId = setTimeout(queueNextPlaybackStep, step);
+  const stepMs = baseStep / (tempo || 1);
+  playbackTimeoutId = setTimeout(queueNextPlaybackStep, stepMs);
 }
-
-// ----- Auto-save Recordings -----
 
 function autoSaveCurrentRecording() {
   const seq = [...recordedSequence];
@@ -598,8 +622,6 @@ function autoSaveCurrentRecording() {
 
   recordedSequence = [];
 }
-
-// ----- Storage -----
 
 function loadSavedRecordings() {
   try {
@@ -633,8 +655,6 @@ function persistSavedRecordings() {
   }
 }
 
-// ----- Title Coloring -----
-
 function setupTitlePill() {
   const titleTextEl = document.querySelector(".keysonic-title-text");
   const subtitleEl = document.getElementById("word-music-subtitle");
@@ -659,8 +679,6 @@ function setupTitlePill() {
     titleTextEl.appendChild(span);
   }
 }
-
-// ----- Saved Cards Coloring -----
 
 function applyColorsToSavedTitles() {
   if (!savedGridEl || !Array.isArray(savedRecordings)) return;
@@ -704,8 +722,6 @@ function applyColorsToSavedTitles() {
   });
 }
 
-// ----- Typed Display -----
-
 function resetTypedText() {
   typedText = "";
   syncTypedDisplay();
@@ -745,8 +761,6 @@ function syncTypedDisplay() {
   }
 }
 
-// ----- Now Playing Coloring -----
-
 function updateNowPlayingColors(chars, sequence) {
   if (!chars || !chars.length) return;
   const seqLen = sequence.length;
@@ -776,8 +790,6 @@ function highlightNowPlayingIndex(chars, activeIndex) {
     }
   });
 }
-
-// ----- Mapping Helpers -----
 
 function mapCodeToCharForTyping(code) {
   const actionAsSpace = new Set([
@@ -860,8 +872,6 @@ function normalizeEventToCode(e) {
   return null;
 }
 
-// ----- Key Order / Color / Tone -----
-
 function computeKeyOrder() {
   const codes = [];
   layoutMain.forEach((row) => {
@@ -916,8 +926,6 @@ function getFrequencyForCode(code) {
   return getFrequencyForIndex(idx, currentScaleId, rootFreq);
 }
 
-// ----- Keyboard Visuals -----
-
 function applyBaseKeyColors() {
   if (!keyElements) return;
   Object.values(keyElements).forEach((els) => {
@@ -943,8 +951,6 @@ function resetKeyboardShadow() {
     el.style.boxShadow = "0 2px 10px rgba(15, 23, 42, 0.12)";
   });
 }
-
-// ----- Audio + Flash -----
 
 function playTone(code) {
   const freq = getFrequencyForCode(code);
@@ -1015,8 +1021,6 @@ function triggerKey(code, { fromPlayback = false } = {}) {
   playTone(code);
   flashKey(code);
 }
-
-// ----- Utils -----
 
 function makeId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);

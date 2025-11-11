@@ -9,9 +9,12 @@ export function getDomRefs() {
   const nowPlayingEl = document.getElementById("now-playing");
   const savedGridEl = document.getElementById("wm-saved-grid");
 
-  const recordBtn = wmControls?.querySelector('button[data-action="record"]') || null;
-  const stopBtn   = wmControls?.querySelector('button[data-action="stop"]') || null;
-  const clearBtn  = wmControls?.querySelector('button[data-action="clear"]') || null;
+  const recordBtn =
+    wmControls?.querySelector('button[data-action="record"]') || null;
+  const stopBtn =
+    wmControls?.querySelector('button[data-action="stop"]') || null;
+  const clearBtn =
+    wmControls?.querySelector('button[data-action="clear"]') || null;
 
   const saveTypedBtn = document.getElementById("save-typed-btn");
 
@@ -26,7 +29,7 @@ export function getDomRefs() {
     recordBtn,
     stopBtn,
     clearBtn,
-    saveTypedBtn
+    saveTypedBtn,
   };
 }
 
@@ -41,7 +44,7 @@ export function buildKeyboards({
   mainRowsContainer,
   numpadContainer,
   getHueForCode,
-  onKeyPress
+  onKeyPress,
 }) {
   const keyElements = {};
 
@@ -49,11 +52,11 @@ export function buildKeyboards({
   if (mainRowsContainer) {
     mainRowsContainer.innerHTML = "";
 
-    layoutMain.forEach(row => {
+    layoutMain.forEach((row) => {
       const rowEl = document.createElement("div");
       rowEl.className = "row";
 
-      row.forEach(k => {
+      row.forEach((k) => {
         const keyEl = document.createElement("div");
         keyEl.classList.add("key");
         if (k.small) keyEl.classList.add("label-small");
@@ -69,14 +72,18 @@ export function buildKeyboards({
         keyEl.dataset.code = k.code;
         keyEl.dataset.hue = String(hue);
 
-        keyEl.addEventListener("mousedown", ev => {
+        keyEl.addEventListener("mousedown", (ev) => {
           ev.preventDefault();
           onKeyPress(k.code);
         });
-        keyEl.addEventListener("touchstart", ev => {
-          ev.preventDefault();
-          onKeyPress(k.code);
-        }, { passive: false });
+        keyEl.addEventListener(
+          "touchstart",
+          (ev) => {
+            ev.preventDefault();
+            onKeyPress(k.code);
+          },
+          { passive: false }
+        );
 
         if (!keyElements[k.code]) keyElements[k.code] = [];
         keyElements[k.code].push(keyEl);
@@ -92,7 +99,7 @@ export function buildKeyboards({
   if (numpadContainer) {
     numpadContainer.innerHTML = "";
 
-    layoutNumpadGrid.forEach(k => {
+    layoutNumpadGrid.forEach((k) => {
       const keyEl = document.createElement("div");
       keyEl.classList.add("key");
       if (k.small) keyEl.classList.add("label-small");
@@ -108,14 +115,18 @@ export function buildKeyboards({
       keyEl.dataset.code = k.code;
       keyEl.dataset.hue = String(hue);
 
-      keyEl.addEventListener("mousedown", ev => {
+      keyEl.addEventListener("mousedown", (ev) => {
         ev.preventDefault();
         onKeyPress(k.code);
       });
-      keyEl.addEventListener("touchstart", ev => {
-        ev.preventDefault();
-        onKeyPress(k.code);
-      }, { passive: false });
+      keyEl.addEventListener(
+        "touchstart",
+        (ev) => {
+          ev.preventDefault();
+          onKeyPress(k.code);
+        },
+        { passive: false }
+      );
 
       if (!keyElements[k.code]) keyElements[k.code] = [];
       keyElements[k.code].push(keyEl);
@@ -167,44 +178,66 @@ export function setNowPlaying(nowPlayingEl, label) {
   return spans;
 }
 
-/**
- * Render saved recordings grid.
- * Each entry: { id, name, sequence }
- */
-export function renderSavedGrid(container, savedRecordings) {
+export function renderSavedGrid(container, recordings) {
   if (!container) return;
   container.innerHTML = "";
 
-  if (!Array.isArray(savedRecordings) || savedRecordings.length === 0) {
+  if (!Array.isArray(recordings) || recordings.length === 0) {
     return;
   }
 
-  savedRecordings.forEach(entry => {
+  recordings.forEach((entry) => {
     const card = document.createElement("div");
     card.className = "saved-card";
     card.dataset.id = entry.id;
 
-    const header = document.createElement("div");
-    header.className = "saved-card-header";
+    if (entry.loop) {
+      card.classList.add("looping");
+    }
+    if (entry.reverse) {
+      card.classList.add("reversed");
+    }
 
     const title = document.createElement("div");
     title.className = "saved-card-title";
-    title.textContent = entry.name || "Recording";
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "saved-card-delete";
-    delBtn.type = "button";
-    delBtn.textContent = "×";
-
-    header.appendChild(title);
-    header.appendChild(delBtn);
+    title.textContent = entry.name || "";
 
     const meta = document.createElement("div");
     meta.className = "saved-card-meta";
-    meta.textContent = `${entry.sequence.length} key(s)`;
+    const noteCount = Array.isArray(entry.sequence) ? entry.sequence.length : 0;
+    meta.textContent = `${noteCount} note${noteCount === 1 ? "" : "s"}`;
 
-    card.appendChild(header);
+    const playIndicator = document.createElement("div");
+    playIndicator.className = "saved-card-play-indicator";
+
+    const actions = document.createElement("div");
+    actions.className = "saved-card-actions";
+
+    const loopBtn = document.createElement("button");
+    loopBtn.type = "button";
+    loopBtn.className = "saved-card-loop-toggle";
+    loopBtn.title = "Loop this song";
+    loopBtn.textContent = "⟳";
+
+    const reverseBtn = document.createElement("button");
+    reverseBtn.type = "button";
+    reverseBtn.className = "saved-card-reverse-toggle";
+    reverseBtn.title = "Play this song backwards";
+    reverseBtn.textContent = "↺";
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "saved-card-delete";
+    delBtn.textContent = "✕";
+
+    actions.appendChild(loopBtn);
+    actions.appendChild(reverseBtn);
+    actions.appendChild(delBtn);
+
+    card.appendChild(title);
     card.appendChild(meta);
+    card.appendChild(playIndicator);
+    card.appendChild(actions);
 
     container.appendChild(card);
   });

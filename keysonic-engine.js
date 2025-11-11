@@ -46,6 +46,7 @@ let recordedSequence = [];
 
 let playbackTimeoutId = null;
 let playbackSequence = null;
+let playbackReversed = false;
 let playbackIndex = 0;
 let playbackLabel = "";
 
@@ -65,6 +66,8 @@ let typedTextEl;
 let nowPlayingEl;
 let savedGridEl;
 let typedBackspaceBtn;
+
+let currentPlaybackId = null;
 
 let typedText = "";
 let nowPlayingChars = [];
@@ -122,8 +125,8 @@ export function initKeysonic() {
   }
 
   if (typedBackspaceBtn) {
-  typedBackspaceBtn.addEventListener("click", handleTypedBackspaceClick);
-}
+    typedBackspaceBtn.addEventListener("click", handleTypedBackspaceClick);
+  }
 
   computeKeyOrder();
 
@@ -300,8 +303,10 @@ function handleSaveTypedClick() {
   const entryName = makeUniqueName(name);
   const entry = {
     id: makeId(),
-    name: entryName,
+    name,
     sequence: seq,
+    loop: false,
+    reverse: false,
   };
 
   savedRecordings.push(entry);
@@ -314,20 +319,74 @@ function handleSaveTypedClick() {
 }
 
 function handleSavedGridClick(e) {
+  const loopBtn = e.target.closest(".saved-card-loop-toggle");
+  if (loopBtn) {
+    const card = loopBtn.closest(".saved-card");
+    if (!card) return;
+    const id = card.dataset.id;
+
+    const entry = savedRecordings.find((r) => r.id === id);
+    if (!entry) return;
+
+    // Flip this recording's loop flag
+    entry.loop = !entry.loop;
+
+    persistSavedRecordings();
+    renderSavedGrid(savedGridEl, savedRecordings);
+    applyColorsToSavedTitles();
+    applyPlaybackCardHighlight(); // keep playing highlight in sync
+
+    e.stopPropagation();
+    return;
+  }
+
   const deleteBtn = e.target.closest(".saved-card-delete");
   if (deleteBtn) {
     const card = deleteBtn.closest(".saved-card");
     if (!card) return;
     const id = card.dataset.id;
 
+    // If this card is currently playing, stop playback immediately
+    if (currentPlaybackId === id) {
+      stopPlayback();
+    }
+
     savedRecordings = savedRecordings.filter((r) => r.id !== id);
     persistSavedRecordings();
     renderSavedGrid(savedGridEl, savedRecordings);
     applyColorsToSavedTitles();
+    applyPlaybackCardHighlight();
 
     if (savedRecordings.length === 0) {
       recordedSequence = [];
       updateControls();
+    }
+
+    e.stopPropagation();
+    return;
+  }
+
+  const reverseBtn = e.target.closest(".saved-card-reverse-toggle");
+  if (reverseBtn) {
+    const card = reverseBtn.closest(".saved-card");
+    if (!card) return;
+    const id = card.dataset.id;
+
+    const entry = savedRecordings.find((r) => r.id === id);
+    if (!entry) return;
+
+    // Toggle this recording's reverse flag
+    entry.reverse = !entry.reverse;
+
+    persistSavedRecordings();
+    renderSavedGrid(savedGridEl, savedRecordings);
+    applyColorsToSavedTitles();
+    applyPlaybackCardHighlight();
+
+    // If THIS card is currently playing, restart playback with new direction
+    if (isPlayingBack && currentPlaybackId === id) {
+      stopPlayback();
+      playSequence(entry.sequence, entry.name, id, !!entry.reverse);
     }
 
     e.stopPropagation();
@@ -342,7 +401,7 @@ function handleSavedGridClick(e) {
   if (!entry || !entry.sequence.length) return;
 
   stopPlayback();
-  playSequence(entry.sequence, entry.name);
+  playSequence(entry.sequence, entry.name, id, !!entry.reverse);
 }
 
 function handleTypedBackspaceClick() {
@@ -356,7 +415,6 @@ function handleTypedBackspaceClick() {
   updateControls();
 }
 
-
 // ----- Playback Control -----
 
 function stopPlayback() {
@@ -369,9 +427,12 @@ function stopPlayback() {
   playbackSequence = null;
   playbackIndex = 0;
   playbackLabel = "";
+  currentPlaybackId = null;
+  playbackReversed = false;
 
   nowPlayingChars = setNowPlaying(nowPlayingEl, "");
   updateControls();
+  applyPlaybackCardHighlight();
 }
 
 // ----- Recording & Controls -----
@@ -399,9 +460,9 @@ function updateControls() {
   }
 
   if (typedBackspaceBtn) {
-  const canBackspace = hasTyped && !isRecording && !isPlayingBack;
-  typedBackspaceBtn.disabled = !canBackspace;
-}
+    const canBackspace = hasTyped && !isRecording && !isPlayingBack;
+    typedBackspaceBtn.disabled = !canBackspace;
+  }
 }
 
 function recordKeyStroke(code) {
@@ -411,8 +472,7 @@ function recordKeyStroke(code) {
   }
 }
 
-// ----- Play Sequence -----
-function playSequence(sequence, label) {
+function playSequence(sequence, label, playbackId = null, reversed = false) {
   if (!sequence || !sequence.length) return;
 
   // Clean start
@@ -422,9 +482,13 @@ function playSequence(sequence, label) {
   isPlayingBack = true;
   isRecording = false;
 
-  playbackSequence = sequence.slice();
+  playbackSequence = reversed ? sequence.slice().reverse() : sequence.slice();
+
   playbackIndex = 0;
   playbackLabel = label != null ? String(label) : "";
+  playbackReversed = !!reversed;
+
+  if (playbackId) currentPlaybackId = playbackId;
 
   nowPlayingChars = setNowPlaying(nowPlayingEl, playbackLabel);
   if (playbackSequence.length) {
@@ -432,38 +496,45 @@ function playSequence(sequence, label) {
   }
 
   updateControls();
+  applyPlaybackCardHighlight();
 
-  // kick off the first step
   queueNextPlaybackStep();
 }
 
 function queueNextPlaybackStep() {
-  // If playback was stopped or sequence missing, clean up.
-  if (
-    !isPlayingBack ||
-    !playbackSequence ||
-    playbackIndex >= playbackSequence.length
-  ) {
+  // If playback was stopped externally or sequence vanished, clean up.
+  if (!isPlayingBack || !playbackSequence) {
     stopPlayback();
     return;
   }
 
-  const code = playbackSequence[playbackIndex];
-
-  // Play this note using the *current* scale & engine.
-  triggerKey(code, { fromPlayback: true });
-
-  // Update Now Playing highlight (if we have a label)
-  if (playbackLabel && nowPlayingChars && nowPlayingChars.length) {
-    const hi = playbackIndex % playbackLabel.length;
-    updateNowPlayingColors(nowPlayingChars, playbackSequence);
-    highlightNowPlayingIndex(nowPlayingChars, hi);
+  const seqLen = playbackSequence.length;
+  if (!seqLen) {
+    stopPlayback();
+    return;
   }
 
-  playbackIndex += 1;
+  if (playbackIndex >= seqLen) {
+    // Check if the currently playing recording is marked as looping
+    let shouldLoop = false;
+    if (currentPlaybackId) {
+      const rec = savedRecordings.find((r) => r.id === currentPlaybackId);
+      if (rec && rec.loop) {
+        shouldLoop = true;
+      }
+    }
 
-  // If that was the last note, schedule a short tail then stop.
-  if (playbackIndex >= playbackSequence.length) {
+    if (shouldLoop) {
+      // Restart from beginning for this same sequence
+      playbackIndex = 0;
+
+      const baseStep = 220;
+      const step = baseStep / (tempo || 1);
+      playbackTimeoutId = setTimeout(queueNextPlaybackStep, step);
+      return;
+    }
+
+    // No loop: small tail, then stop
     const tail = 200 / (tempo || 1);
     playbackTimeoutId = setTimeout(() => {
       stopPlayback();
@@ -471,9 +542,28 @@ function queueNextPlaybackStep() {
     return;
   }
 
-  // Compute delay for the *next* step using the CURRENT tempo.
-  const baseStep = 220; // your existing feel
-  const step = baseStep / (tempo || 1); // changing slider mid-play affects from next note on
+  const code = playbackSequence[playbackIndex];
+
+  // Play this step using the *current* scale & tempo
+  triggerKey(code, { fromPlayback: true });
+
+  if (playbackLabel && nowPlayingChars && nowPlayingChars.length) {
+    const labelLen = playbackLabel.length;
+    const stepIndex = playbackIndex % labelLen;
+
+    const hi = playbackReversed
+      ? labelLen - 1 - stepIndex // walk from right to left when reversed
+      : stepIndex; // normal left to right
+
+    updateNowPlayingColors(nowPlayingChars, playbackSequence);
+    highlightNowPlayingIndex(nowPlayingChars, hi);
+  }
+
+  playbackIndex += 1;
+
+  // Schedule the next step using the CURRENT tempo
+  const baseStep = 220;
+  const step = baseStep / (tempo || 1);
 
   playbackTimeoutId = setTimeout(queueNextPlaybackStep, step);
 }
@@ -497,6 +587,8 @@ function autoSaveCurrentRecording() {
     id: makeId(),
     name,
     sequence: seq,
+    loop: false,
+    reverse: false,
   };
 
   savedRecordings.push(entry);
@@ -518,9 +610,13 @@ function loadSavedRecordings() {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      savedRecordings = parsed.filter(
-        (r) => r && Array.isArray(r.sequence) && r.sequence.length
-      );
+      savedRecordings = parsed
+        .filter((r) => r && Array.isArray(r.sequence) && r.sequence.length)
+        .map((r) => ({
+          ...r,
+          loop: !!r.loop,
+          reverse: !!r.reverse,
+        }));
     } else {
       savedRecordings = [];
     }
@@ -934,4 +1030,14 @@ function makeUniqueName(base) {
     name = `${base} (${i++})`;
   }
   return name;
+}
+
+function applyPlaybackCardHighlight() {
+  if (!savedGridEl) return;
+  const cards = savedGridEl.querySelectorAll(".saved-card");
+  cards.forEach((card) => {
+    const id = card.dataset.id;
+    const isPlayingCard = currentPlaybackId && id === currentPlaybackId;
+    card.classList.toggle("playing", !!isPlayingCard);
+  });
 }

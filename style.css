@@ -38,13 +38,14 @@ body {
 
   /* Lightened musical background */
   background: linear-gradient(
-      rgba(255, 255, 255, 0.5),
-      rgba(255, 255, 255, 0.5)
+      rgba(255, 255, 255, 0.01),
+      rgba(255, 255, 255, 0.01)
     ),
-    /* url("assets/cartoon-style-musical-notes-background.jpg"); */
+    url("assets/cartoon-style-musical-notes-background.jpg");
       /* url("assets/empty-road-dark-atmosphere.jpg"); */
-      url("assets/anime-style-clouds.jpg");
-  /* url("assets/snowy-cold-mountains.jpg"); */
+      /* url("assets/anime-style-clouds.jpg"); */
+      /* url("assets/snowy-cold-mountains.jpg"); */
+    /* url("assets/christmas-santa-reindeer.jpg"); */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

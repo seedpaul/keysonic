@@ -70,6 +70,8 @@ let savedGridEl;
 let typedBackspaceBtn;
 
 let typedText = "";
+let typedCodeSequence = [];
+
 let nowPlayingChars = [];
 let savedRecordings = [];
 
@@ -289,18 +291,32 @@ function handleSaveTypedClick() {
   const name = typedText || "";
   if (!name) return;
 
-  const seq = [];
-  for (const ch of name) {
-    const code = mapCharToCodeFromTypedChar(ch);
-    if (code) seq.push(code);
+  let playSeq = [];
+
+  // If we have a typedCodeSequence (new behavior), use that as the true playback sequence.
+  if (typedCodeSequence && typedCodeSequence.length) {
+    playSeq = typedCodeSequence.slice();
+  } else {
+    // Fallback for legacy behavior: derive from visible characters.
+    for (const ch of name) {
+      const code = mapCharToCodeFromTypedChar(ch);
+      if (code) {
+        playSeq.push(code);
+      }
+    }
   }
-  if (!seq.length) return;
+
+  if (!playSeq.length) return;
 
   const entryName = makeUniqueName(name);
+
   const entry = {
     id: makeId(),
     name,
-    sequence: seq,
+    // Display sequence: exactly what user sees in "Spell a Song"
+    sequence: name.split(""),
+    // Playback sequence: true keystrokes, including action keys.
+    playSequence: playSeq,
     loop: false,
     reverse: false,
   };
@@ -413,10 +429,17 @@ function handleSavedGridClick(e) {
 
   const id = card.dataset.id;
   const entry = savedRecordings.find((r) => r.id === id);
-  if (!entry || !entry.sequence.length) return;
+  if (!entry) return;
+
+  const seq =
+    Array.isArray(entry.playSequence) && entry.playSequence.length
+      ? entry.playSequence
+      : entry.sequence;
+
+  if (!seq || !seq.length) return;
 
   stopPlayback();
-  playSequence(entry.sequence, entry.name, id, !!entry.reverse);
+  playSequence(seq, entry.name, id, !!entry.reverse);
 }
 
 function handleTypedBackspaceClick() {
@@ -500,13 +523,13 @@ function playSequence(sequence, label, playbackId = null, reversed = false) {
   isPlayingBack = true;
   isRecording = false;
 
-  playbackSequence = sequence.slice();             // keep as-is, forward
+  playbackSequence = sequence.slice(); // keep as-is, forward
   playbackLabel = label != null ? String(label) : "";
   playbackReversed = !!reversed;
   playbackStep = 0;
 
   const len = playbackSequence.length;
-  playbackIndex = playbackReversed ? len - 1 : 0;  // start at end if reversed
+  playbackIndex = playbackReversed ? len - 1 : 0; // start at end if reversed
 
   if (playbackId) currentPlaybackId = playbackId;
 
@@ -595,8 +618,16 @@ function queueNextPlaybackStep() {
 }
 
 function autoSaveCurrentRecording() {
-  const seq = [...recordedSequence];
-  if (!seq.length) return;
+  const playSeq = [...recordedSequence];
+  if (!playSeq.length) return;
+
+  // Build display sequence: action keys -> spaces, others -> themselves
+  const displaySeq = playSeq.map((code) => {
+    const ch = mapCodeToCharForTyping(code);
+    // If mapCodeToCharForTyping returns null, fall back to the raw code
+    // so we don't lose anything unexpectedly.
+    return ch !== null && ch !== undefined ? ch : code;
+  });
 
   const rawName = typedText || "";
   const hasNonSpace = rawName.split("").some((ch) => ch !== " ");
@@ -610,7 +641,10 @@ function autoSaveCurrentRecording() {
   const entry = {
     id: makeId(),
     name,
-    sequence: seq,
+    // Human-facing view: what we show on cards, etc.
+    sequence: displaySeq,
+    // Machine-facing sequence: exact keystrokes used for playback.
+    playSequence: playSeq,
     loop: false,
     reverse: false,
   };
@@ -634,11 +668,34 @@ function loadSavedRecordings() {
     if (Array.isArray(parsed)) {
       savedRecordings = parsed
         .filter((r) => r && Array.isArray(r.sequence) && r.sequence.length)
-        .map((r) => ({
-          ...r,
-          loop: !!r.loop,
-          reverse: !!r.reverse,
-        }));
+        .map((r) => {
+          const hasPlay =
+            Array.isArray(r.playSequence) && r.playSequence.length;
+
+          // If playSequence is missing, assume old format where sequence was used for playback.
+          const playSequence = hasPlay
+            ? r.playSequence.slice()
+            : r.sequence.slice();
+
+          // For display, prefer existing sequence; if missing, derive from playSequence.
+          let displaySequence;
+          if (Array.isArray(r.sequence) && r.sequence.length) {
+            displaySequence = r.sequence.slice();
+          } else {
+            displaySequence = playSequence.map((code) => {
+              const ch = mapCodeToCharForTyping(code);
+              return ch !== null && ch !== undefined ? ch : code;
+            });
+          }
+
+          return {
+            ...r,
+            sequence: displaySequence,
+            playSequence,
+            loop: !!r.loop,
+            reverse: !!r.reverse,
+          };
+        });
     } else {
       savedRecordings = [];
     }
@@ -724,18 +781,28 @@ function applyColorsToSavedTitles() {
 
 function resetTypedText() {
   typedText = "";
+  typedCodeSequence = [];
   syncTypedDisplay();
   updateControls();
 }
 
+
 function updateTypedTextForUserKey(code) {
+  // View-only mapping: what character should appear in "Spell a Song"?
   const ch = mapCodeToCharForTyping(code);
+
+  // If this key contributes a visible character (including " " for action keys),
+  // append BOTH the display char and the actual code.
   if (ch !== null && ch !== undefined) {
     typedText += ch;
-  }
+    typedCodeSequence.push(code);
 
-  if (typedText.length > TYPED_MAX_LENGTH) {
-    typedText = typedText.slice(0, TYPED_MAX_LENGTH);
+    if (typedText.length > TYPED_MAX_LENGTH) {
+      // Trim from the front to keep the last TYPED_MAX_LENGTH chars in sync
+      const overflow = typedText.length - TYPED_MAX_LENGTH;
+      typedText = typedText.slice(overflow);
+      typedCodeSequence = typedCodeSequence.slice(overflow);
+    }
   }
 
   syncTypedDisplay();

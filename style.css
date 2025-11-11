@@ -41,9 +41,13 @@ body {
       rgba(255, 255, 255, 0.01),
       rgba(255, 255, 255, 0.01)
     ),
-    url("assets/cartoon-style-musical-notes-background.jpg");
+    /* url("assets/spooky1.jpg"); */
+    /* url("assets/spooky2.jpg"); */
+    /* url("assets/spooky3.gif"); */
+    /* url("assets/spooky4.jpg"); */
+    /* url("assets/cartoon-style-musical-notes-background.jpg"); */
       /* url("assets/empty-road-dark-atmosphere.jpg"); */
-      /* url("assets/anime-style-clouds.jpg"); */
+      url("assets/anime-style-clouds.jpg");
       /* url("assets/snowy-cold-mountains.jpg"); */
     /* url("assets/christmas-santa-reindeer.jpg"); */
   background-size: cover;

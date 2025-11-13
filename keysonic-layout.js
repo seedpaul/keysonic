@@ -217,18 +217,22 @@ export function renderSavedGrid(container, recordings) {
     loopBtn.type = "button";
     loopBtn.className = "saved-card-loop-toggle";
     loopBtn.title = "Loop this song";
+    loopBtn.style.fontSize = '0.9em';
     loopBtn.textContent = "⟳";
 
     const reverseBtn = document.createElement("button");
     reverseBtn.type = "button";
     reverseBtn.className = "saved-card-reverse-toggle";
     reverseBtn.title = "Play this song backwards";
+    reverseBtn.style.fontSize = '0.9em';
     reverseBtn.textContent = "↺";
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.className = "saved-card-delete";
-    delBtn.textContent = "✕";
+    delBtn.title = "Delete this song";
+    delBtn.style.fontSize = '1.2em';
+    delBtn.textContent = "⏏";
 
     actions.appendChild(loopBtn);
     actions.appendChild(reverseBtn);

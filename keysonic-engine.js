@@ -12,7 +12,7 @@ import {
   buildKeyboards,
   setNowPlaying,
   renderSavedGrid,
-} from "./layout.js";
+} from "./keysonic-layout.js";
 
 import { getFrequencyForIndex, SCALES } from "./keysonic-scales.js";
 
@@ -319,6 +319,7 @@ function handleSaveTypedClick() {
     playSequence: playSeq,
     loop: false,
     reverse: false,
+    compose: false,
   };
 
   savedRecordings.push(entry);
@@ -647,6 +648,7 @@ function autoSaveCurrentRecording() {
     playSequence: playSeq,
     loop: false,
     reverse: false,
+    compose: false,
   };
 
   savedRecordings.push(entry);

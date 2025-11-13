@@ -197,6 +197,9 @@ export function renderSavedGrid(container, recordings) {
     if (entry.reverse) {
       card.classList.add("reversed");
     }
+    if (entry.compose) {
+      card.classList.add("composed");
+    }
 
     const title = document.createElement("div");
     title.className = "saved-card-title";
@@ -227,6 +230,14 @@ export function renderSavedGrid(container, recordings) {
     reverseBtn.style.fontSize = '0.9em';
     reverseBtn.textContent = "↺";
 
+    const composeBtn = document.createElement("button");
+    composeBtn.type = "button";
+    composeBtn.className = "saved-card-compose-toggle";
+    composeBtn.title = "Composer-ify this song";
+    composeBtn.style.fontSize = '0.9em';
+    composeBtn.textContent = "♪";
+    composeBtn.setAttribute("aria-pressed", entry.compose ? "true" : "false");
+
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.className = "saved-card-delete";
@@ -236,6 +247,7 @@ export function renderSavedGrid(container, recordings) {
 
     actions.appendChild(loopBtn);
     actions.appendChild(reverseBtn);
+    actions.appendChild(composeBtn);
     actions.appendChild(delBtn);
 
     card.appendChild(title);

@@ -16,6 +16,11 @@ import {
 
 import { getFrequencyForIndex, SCALES } from "./keysonic-scales.js";
 
+import {
+  composeFromText,
+  flattenEventsToStepCodes,
+} from "./keysonic-composer.js";
+
 const ACTION_CODES = new Set([
   "Backspace",
   "Tab",
@@ -425,19 +430,47 @@ function handleSavedGridClick(e) {
     return;
   }
 
+  const composeBtn = e.target.closest(".saved-card-compose-toggle");
+  if (composeBtn) {
+    const card = composeBtn.closest(".saved-card");
+    if (!card) return;
+    const id = card.dataset.id;
+
+    const entry = savedRecordings.find((r) => r.id === id);
+    if (!entry) return;
+
+    // Toggle this recording's composer-ify flag
+    entry.compose = !entry.compose;
+
+    persistSavedRecordings();
+    renderSavedGrid(savedGridEl, savedRecordings);
+    applyColorsToSavedTitles();
+    applyPlaybackCardHighlight();
+
+    e.stopPropagation();
+    return;
+  }
+
   const card = e.target.closest(".saved-card");
   if (!card) return;
 
   const id = card.dataset.id;
   const entry = savedRecordings.find((r) => r.id === id);
-  if (!entry) return;
+  if (!entry || !entry.sequence.length) return;
 
-  const seq =
-    Array.isArray(entry.playSequence) && entry.playSequence.length
-      ? entry.playSequence
-      : entry.sequence;
+  // Start from the raw code sequence we recorded
+  let seq = entry.sequence.slice();
 
-  if (!seq || !seq.length) return;
+  // If composer-ify is enabled for this card, transform it
+  if (entry.compose && seq.length) {
+    const song = composeFromText(seq, {
+      meter: "4/4",
+      restBetweenWords: 1,
+      wordContour: "arch",
+      maxSpan: 4,
+    });
+    seq = flattenEventsToStepCodes(song);
+  }
 
   stopPlayback();
   playSequence(seq, entry.name, id, !!entry.reverse);

@@ -590,22 +590,12 @@ body.has-now-playing #now-playing-fieldset {
   transform: translateY(-1px);
 }
 
-.saved-card.looping {
-  border-color: #22c55e;
-  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.35);
-}
-
 .saved-card.looping .saved-card-loop-toggle {
   background-color: #22c55e;
   border-color: #16a34a;
   color: black;
   box-shadow: 0 2px 4px rgba(34, 197, 94, 0.45);
   transform: none;
-}
-
-.saved-card.looping .saved-card-loop-toggle:hover {
-  background-color: #16a34a;
-  border-color: #15803d;
 }
 
 .saved-card-reverse-toggle {
@@ -635,10 +625,44 @@ body.has-now-playing #now-playing-fieldset {
   transform: translateY(-1px);
 }
 
-/* When this card's reverse flag is on */
 .saved-card.reversed .saved-card-reverse-toggle {
   background-color: #a855f7;
-  border-color: #7c3aed;
+  border-color: #a855f7;
+  color: black;
+  box-shadow: 0 2px 4px rgba(124, 58, 237, 0.45);
+  transform: none;
+}
+
+.saved-card-compose-toggle {
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast),
+    color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fastEST), box-shadow var(--transition-fast);
+}
+
+.saved-card-compose-toggle:hover {
+  background-color: #f5f3ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(124, 58, 237, 0.25);
+  transform: translateY(-1px);
+}
+
+.saved-card.composed .saved-card-compose-toggle {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
   color: black;
   box-shadow: 0 2px 4px rgba(124, 58, 237, 0.45);
   transform: none;

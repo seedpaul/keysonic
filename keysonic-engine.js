@@ -61,7 +61,6 @@ let keyElements = {};
 let keyboardEls = [];
 let audioCtx;
 
-let titleEl;
 let mainRowsContainer;
 let numpadContainer;
 let recordBtn;
@@ -94,7 +93,6 @@ const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 export function initKeysonic() {
   const dom = getDomRefs();
   ({
-    titleEl,
     mainRowsContainer,
     numpadContainer,
     typedTextEl,
@@ -182,12 +180,35 @@ export function initKeysonic() {
     // react to user changes
     scaleSelect.addEventListener("change", () => {
       const next = scaleSelect.value;
-      if (SCALES[next]) {
-        currentScaleId = next;
-        localStorage.setItem(SCALE_PREF_KEY, next);
-        // optional: if a song is currently playing, you could restart it here under the new scale
-        // if (isPlayingBack) { stopPlayback(); /* optionally re-play last sequence */ }
+      if (!SCALES[next]) return;
+
+      currentScaleId = next;
+      localStorage.setItem(SCALE_PREF_KEY, next);
+
+      // 1) Recompute hues for every physical key so that
+      //    keys that play the same note stay visually grouped
+      if (keyElements) {
+        Object.entries(keyElements).forEach(([code, els]) => {
+          const hue = getHueForCode(code);
+          if (isNaN(hue)) return;
+
+          els.forEach((el) => {
+            el.dataset.hue = String(hue);
+          });
+        });
+
+        // Re-apply base colors with the new hues
+        applyBaseKeyColors();
       }
+
+      // 2) Refresh colors on saved song titles (they use getHueForCode too)
+      applyColorsToSavedTitles();
+
+      // 3) Refresh colors on the "Spell a Song" typed text
+      syncTypedDisplay();
+
+      // optional: if a song is currently playing, you could restart it here under the new scale
+      // if (isPlayingBack) { stopPlayback(); /* optionally re-play last sequence */ }
     });
   }
 
@@ -337,6 +358,7 @@ function handleSaveTypedClick() {
 }
 
 function handleSavedGridClick(e) {
+  
   const loopBtn = e.target.closest(".saved-card-loop-toggle");
   if (loopBtn) {
     const card = loopBtn.closest(".saved-card");
@@ -481,6 +503,12 @@ function handleSavedGridClick(e) {
   const entry = savedRecordings.find((r) => r.id === id);
   if (!entry || !entry.sequence.length) return;
 
+  // If this card is currently playing, treat click as a STOP toggle
+  if (isPlayingBack && currentPlaybackId === id) {
+    stopPlayback();
+    return;
+  }
+
   // Start from the raw code sequence we recorded
   let seq = entry.sequence.slice();
 
@@ -495,6 +523,7 @@ function handleSavedGridClick(e) {
     seq = flattenEventsToStepCodes(song);
   }
 
+  // Start playback of this card
   stopPlayback();
   playSequence(seq, entry.name, id, !!entry.reverse);
 }
@@ -505,6 +534,9 @@ function handleTypedBackspaceClick() {
 
   // Remove last character from Spell a Song text
   typedText = typedText.slice(0, -1);
+  if (typedCodeSequence.length > 0) {
+    typedCodeSequence.pop();
+  }
 
   syncTypedDisplay();
   updateControls();
@@ -1010,6 +1042,34 @@ function computeKeyOrder() {
 }
 
 function getHueForCode(code) {
+  // If we have a musical mapping for this key, use it so that
+  // all keys that land on the same note share the same hue.
+  if (
+    Array.isArray(keyOrder) &&
+    keyOrder.length &&
+    SCALES &&
+    SCALES[currentScaleId]
+  ) {
+    let idx = keyOrder.indexOf(code);
+
+    if (idx !== -1) {
+      const scale = SCALES[currentScaleId] || SCALES.major;
+      const degreesPerOctave =
+        scale.steps && scale.steps.length ? scale.steps.length : 1;
+      const maxOctaves = scale.octaves || 3;
+      const windowSize = degreesPerOctave * maxOctaves || 1;
+
+      // This is the same wrapping concept used in getFrequencyForIndex:
+      // different keys that land on the same wrapped index → same note.
+      const slot = windowSize > 0 ? idx % windowSize : idx;
+
+      const hueIdx = Math.abs(slot) % DISTINCT_HUES.length;
+      return DISTINCT_HUES[hueIdx];
+    }
+  }
+
+  // Fallback: original hash-based mapping (covers things like title letters
+  // and any codes not in keyOrder, and still works before keyOrder is computed)
   let hash = 0;
   for (let i = 0; i < code.length; i++) {
     hash = (hash << 5) - hash + code.charCodeAt(i);
@@ -1020,15 +1080,18 @@ function getHueForCode(code) {
 }
 
 function getBaseKeyColor(hue) {
-  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 40%, 92%)`;
+  // lighter pastel but more saturated → better separation between hues
+  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 55%, 88%)`;
 }
 
 function getBaseKeyBorder(hue) {
-  return isNaN(hue) ? "var(--key-border)" : `hsl(${hue}, 35%, 78%)`;
+  // darker border for contrast against the base fill
+  return isNaN(hue) ? "var(--key-border)" : `hsl(${hue}, 55%, 70%)`;
 }
 
 function getActiveKeyColor(hue) {
-  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 90%, 55%)`;
+  // vivid active color so pressed keys really pop
+  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 80%, 48%)`;
 }
 
 function getFrequencyForCode(code, degreeOffset = 0) {
@@ -1217,40 +1280,40 @@ function spawnNoteParticleForKey(code, opts = {}) {
 
   if (!els || !els.length) return;
 
-  const keyEl = els[0];
-  const rect = keyEl.getBoundingClientRect();
-
   const glyph = getNoteGlyphForCode(code);
   if (!glyph) return;
 
-  const noteEl = document.createElement("div");
-  // Echo hits get an extra class so we can style them differently if we want.
-  noteEl.className = isEcho ? "note-float note-float-echo" : "note-float";
-  noteEl.textContent = glyph;
+  // 🔑 For keys with multiple physical instances (Shift, Ctrl, Alt, etc.),
+  //     create a note for EACH DOM element.
+  els.forEach((keyEl) => {
+    const rect = keyEl.getBoundingClientRect();
 
-  // Color: match the key’s hue if present, otherwise let CSS default handle it
-  const hue = parseFloat(keyEl.dataset.hue);
-  if (!isNaN(hue)) {
-    // Slightly brighter than base; echo hits get a bit more pop.
-    const sat = isEcho ? 96 : 92;
-    const light = isEcho ? 60 : 64;
-    noteEl.style.color = `hsl(${hue}, ${sat}%, ${light}%)`;
-  }
+    const noteEl = document.createElement("div");
+    noteEl.className = isEcho ? "note-float note-float-echo" : "note-float";
+    noteEl.textContent = glyph;
 
-  // Horizontal flutter: small random offset left/right.
-  const dx = (Math.random() * 26 - 13).toFixed(1) + "px";
-  noteEl.style.setProperty("--dx", dx);
+    // Color: match the key’s hue if present
+    const hue = parseFloat(keyEl.dataset.hue);
+    if (!isNaN(hue)) {
+      const sat = isEcho ? 96 : 92;
+      const light = isEcho ? 60 : 64;
+      noteEl.style.color = `hsl(${hue}, ${sat}%, ${light}%)`;
+    }
 
-  // Position at top-center of key
-  noteEl.style.left = `${rect.left + rect.width / 2}px`;
-  noteEl.style.top = `${rect.top}px`;
+    // Horizontal flutter: small random offset left/right per key
+    const dx = (Math.random() * 26 - 13).toFixed(1) + "px";
+    noteEl.style.setProperty("--dx", dx);
 
-  document.body.appendChild(noteEl);
+    // Position at top-center of this specific key
+    noteEl.style.left = `${rect.left + rect.width / 2}px`;
+    noteEl.style.top = `${rect.top}px`;
 
-  // Clean up after animation
-  setTimeout(() => {
-    noteEl.remove();
-  }, 1200);
+    document.body.appendChild(noteEl);
+
+    setTimeout(() => {
+      noteEl.remove();
+    }, 1200);
+  });
 }
 
 function getScaleContextId() {

@@ -100,6 +100,13 @@ export const layoutNumpadGrid = [
   { label: ".",     code: "NumpadDecimal",  r: 5, c: 3 }
 ];
 
-export const DISTINCT_HUES = [0, 25, 50, 80, 140, 190, 230, 280, 320];
+export const DISTINCT_HUES = [
+  0,   15,  30,  45,
+  60,  75,  90,  105,
+  120, 135, 150, 165,
+  180, 195, 210, 225,
+  240, 255, 270, 285,
+  300, 315, 330, 345
+];
 export const STORAGE_KEY = "keysonic-saved-v1";
 export const TYPED_MAX_LENGTH = 500;

@@ -233,9 +233,9 @@ export function renderSavedGrid(container, recordings) {
     const composeBtn = document.createElement("button");
     composeBtn.type = "button";
     composeBtn.className = "saved-card-compose-toggle";
-    composeBtn.title = "Composer-ify this song";
-    composeBtn.style.fontSize = '0.9em';
-    composeBtn.textContent = "♪";
+    composeBtn.title = "Funkified";
+    composeBtn.style.fontSize = '0.8em';
+    composeBtn.textContent = "🔥";
     composeBtn.setAttribute("aria-pressed", entry.compose ? "true" : "false");
 
     const delBtn = document.createElement("button");

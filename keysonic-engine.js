@@ -439,13 +439,36 @@ function handleSavedGridClick(e) {
     const entry = savedRecordings.find((r) => r.id === id);
     if (!entry) return;
 
-    // Toggle this recording's composer-ify flag
+    // 1) Flip this recording's Composer-ify flag
     entry.compose = !entry.compose;
 
+    // 2) Persist + rerender UI (same pattern as loop/reverse)
     persistSavedRecordings();
     renderSavedGrid(savedGridEl, savedRecordings);
     applyColorsToSavedTitles();
     applyPlaybackCardHighlight();
+
+    // 3) If THIS card is currently playing, restart playback
+    //    with the appropriate (composed or raw) sequence.
+    if (isPlayingBack && currentPlaybackId && currentPlaybackId === id) {
+      // Start from the raw recorded sequence
+      let seq = entry.sequence.slice();
+
+      // Apply composer-ify if the toggle is now ON
+      if (entry.compose && seq.length) {
+        const song = composeFromText(seq, {
+          meter: "4/4",
+          restBetweenWords: 3,
+          wordContour: "arch",
+          maxSpan: 4,
+        });
+        seq = flattenEventsToStepCodes(song);
+      }
+
+      // This will stop the old playback and immediately start
+      // the new one using the same label and reverse state.
+      playSequence(seq, entry.name, id, !!entry.reverse);
+    }
 
     e.stopPropagation();
     return;
@@ -465,7 +488,7 @@ function handleSavedGridClick(e) {
   if (entry.compose && seq.length) {
     const song = composeFromText(seq, {
       meter: "4/4",
-      restBetweenWords: 1,
+      restBetweenWords: 3,
       wordContour: "arch",
       maxSpan: 4,
     });
@@ -1008,7 +1031,7 @@ function getActiveKeyColor(hue) {
   return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 90%, 55%)`;
 }
 
-function getFrequencyForCode(code) {
+function getFrequencyForCode(code, degreeOffset = 0) {
   // Find stable position of this key in the keyboard map
   let idx = keyOrder.indexOf(code);
 
@@ -1022,6 +1045,10 @@ function getFrequencyForCode(code) {
     const len = keyOrder.length || 1;
     idx = Math.abs(hash) % len;
   }
+
+  // Apply bass-walk style offset (from composer)
+  idx += degreeOffset;
+  if (idx < 0) idx = 0;
 
   // Delegate to the scale engine
   return getFrequencyForIndex(idx, currentScaleId, rootFreq);
@@ -1053,8 +1080,9 @@ function resetKeyboardShadow() {
   });
 }
 
-function playTone(code) {
-  const freq = getFrequencyForCode(code);
+function playTone(code, opts = {}) {
+  const { degreeOffset = 0 } = opts;
+  const freq = getFrequencyForCode(code, degreeOffset);
   if (!freq || !audioCtx) return;
 
   const now = audioCtx.currentTime;
@@ -1073,7 +1101,7 @@ function playTone(code) {
   osc.stop(now + 0.26);
 }
 
-function flashKey(code) {
+function flashKey(code, { isEcho = false } = {}) {
   const els = keyElements[code];
   if (!els || !els.length) return;
 
@@ -1089,6 +1117,9 @@ function flashKey(code) {
     el.style.backgroundColor = activeBg;
   });
 
+  // Use the existing particle system, but let it know if this is an echo hit
+  spawnNoteParticleForKey(code, { isEcho });
+
   setTimeout(() => {
     els.forEach((el) => {
       el.classList.remove("active");
@@ -1100,7 +1131,34 @@ function flashKey(code) {
   }, 140);
 }
 
-function triggerKey(code, { fromPlayback = false } = {}) {
+function triggerKey(rawCode, { fromPlayback = false } = {}) {
+  // REST tokens from the composer: advance time but do nothing visually
+  if (rawCode === "__REST__") {
+    return;
+  }
+
+  let code = rawCode;
+  let isEcho = false;
+  let degreeOffset = 0;
+
+  // Parse composer-encoded tokens, e.g. "ECHO:B-2:KeyA"
+  if (typeof rawCode === "string" && rawCode.includes(":")) {
+    const parts = rawCode.split(":");
+    const base = parts[parts.length - 1];
+    const tags = parts.slice(0, parts.length - 1);
+
+    code = base;
+
+    for (const tag of tags) {
+      if (tag === "ECHO") {
+        isEcho = true;
+      } else if (tag.startsWith("B")) {
+        const n = parseInt(tag.slice(1), 10);
+        if (Number.isFinite(n)) degreeOffset = n;
+      }
+    }
+  }
+
   // Allow recorded codes and the explicit space character
   if (!keyOrder.includes(code) && code !== " ") {
     return;
@@ -1115,13 +1173,11 @@ function triggerKey(code, { fromPlayback = false } = {}) {
   }
 
   // Playback:
-  // Use the actual code from the saved sequence:
   // - action keys light up their own key
   // - space (" ") lights the spacebar
-  // - everything gets its tone as usual
-  playTone(code);
-  flashKey(code);
-  spawnNoteParticleForKey(code);
+  // - echo hits can walk the bass (degreeOffset) and get special visuals
+  playTone(code, { degreeOffset });
+  flashKey(code, { isEcho });
 }
 
 function makeId() {
@@ -1149,8 +1205,9 @@ function applyPlaybackCardHighlight() {
 }
 
 // musical symbols******************************************
+function spawnNoteParticleForKey(code, opts = {}) {
+  const { isEcho = false } = opts;
 
-function spawnNoteParticleForKey(code) {
   let els = keyElements[code];
 
   // Handle the explicit space token as the spacebar key visually.
@@ -1167,14 +1224,17 @@ function spawnNoteParticleForKey(code) {
   if (!glyph) return;
 
   const noteEl = document.createElement("div");
-  noteEl.className = "note-float";
+  // Echo hits get an extra class so we can style them differently if we want.
+  noteEl.className = isEcho ? "note-float note-float-echo" : "note-float";
   noteEl.textContent = glyph;
 
   // Color: match the key’s hue if present, otherwise let CSS default handle it
   const hue = parseFloat(keyEl.dataset.hue);
   if (!isNaN(hue)) {
-    // Slightly brighter than base, not as strong as active.
-    noteEl.style.color = `hsl(${hue}, 92%, 64%)`;
+    // Slightly brighter than base; echo hits get a bit more pop.
+    const sat = isEcho ? 96 : 92;
+    const light = isEcho ? 60 : 64;
+    noteEl.style.color = `hsl(${hue}, ${sat}%, ${light}%)`;
   }
 
   // Horizontal flutter: small random offset left/right.

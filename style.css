@@ -35,24 +35,24 @@ body {
   color: var(--text);
   background-color: var(--bg);
   overflow: hidden;
-
   /* Lightened musical background */
-  background: linear-gradient(
+  background: 
+    linear-gradient(
       rgba(255, 255, 255, 0.01),
       rgba(255, 255, 255, 0.01)
-    ),
+    ), 
     /* url("assets/spooky1.jpg"); */
     /* url("assets/spooky2.jpg"); */
     /* url("assets/spooky3.gif"); */
     /* url("assets/spooky4.jpg"); */
     /* url("assets/cartoon-style-musical-notes-background.jpg"); */
-      /* url("assets/empty-road-dark-atmosphere.jpg"); */
-      url("assets/anime-style-clouds.jpg");
-      /* url("assets/snowy-cold-mountains.jpg"); */
+    /* url("assets/empty-road-dark-atmosphere.jpg"); */
+    /* url("assets/anime-style-clouds.jpg"); */
+    url("assets/snowy-cold-mountains.jpg");
     /* url("assets/christmas-santa-reindeer.jpg"); */
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 /* ---------- Title Pill ---------- */
@@ -777,3 +777,7 @@ body.has-now-playing #now-playing-fieldset {
   }
 }
 
+.note-float-echo {
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.7));
+}

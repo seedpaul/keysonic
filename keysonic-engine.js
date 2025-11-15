@@ -359,10 +359,9 @@ function handleSaveTypedClick() {
   renderSavedGrid(savedGridEl, savedRecordings);
   applyColorsToSavedTitles();
 
-  resetTypedText();                         // wipes Spell a Song box + buffers
+  resetTypedText(); // wipes Spell a Song box + buffers
   nowPlayingChars = setNowPlaying(nowPlayingEl, ""); // optional: also clear Now Playing
-  updateControls();    
-
+  updateControls();
 }
 
 function handleSavedGridClick(e) {
@@ -1038,8 +1037,8 @@ function normalizeEventToCode(e) {
     if (code === "NumpadEnter") return "NumpadEnter";
     return "Enter";
   }
-  if (key && key.startsWith("Arrow")) return key;
   if (code.startsWith("Numpad")) return code;
+  if (key && key.startsWith("Arrow")) return key;
   if (key && key.length === 1) {
     return /[a-z]/.test(key) ? key.toUpperCase() : key;
   }
@@ -1311,8 +1310,7 @@ function spawnNoteParticleForKey(code, opts = {}) {
     const color = !isNaN(hue) ? `hsl(${hue}, ${sat}%, ${light}%)` : null;
 
     const isRectHidden = !rect || (rect.width === 0 && rect.height === 0);
-    const isNumpadKey =
-      typeof code === "string" && code.startsWith("Numpad");
+    const isNumpadKey = typeof code === "string" && code.startsWith("Numpad");
 
     if (isRectHidden && isNumpadKey) {
       // 🔄 Route hidden numpad notes through the robot
@@ -1367,7 +1365,6 @@ function spawnNoteParticleForKey(code, opts = {}) {
       noteEl.remove();
     }, 1200);
   });
-
 }
 
 function getScaleContextId() {
@@ -1627,17 +1624,23 @@ function ensureNumpadRobot() {
       <div class="numpad-robot-eye" data-eye="right"></div>
       <div class="numpad-robot-mouth"></div>
     </div>
+    <div class="numpad-robot-speech">ouch!</div>
   `;
 
   document.body.appendChild(robot);
 
   numpadRobotEl = robot;
-  numpadRobotEyes = Array.from(
-    robot.querySelectorAll(".numpad-robot-eye")
-  );
+  numpadRobotEyes = Array.from(robot.querySelectorAll(".numpad-robot-eye"));
 
   // Start the floating animation once it's in the DOM
   startNumpadRobotFloat();
+
+  // Easter egg: poke the robot
+  robot.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    triggerNumpadRobotOuch();
+  });
 
   return robot;
 }
@@ -1674,7 +1677,7 @@ function startNumpadRobotFloat() {
   const robot = ensureNumpadRobot();
   if (numpadRobotFloatRAF !== null) return; // already running
 
-  // Measure size once we have it in the DOM
+  // Measure size
   const rect = robot.getBoundingClientRect();
   if (rect.width && rect.height) {
     numpadRobotSize.w = rect.width;
@@ -1682,27 +1685,37 @@ function startNumpadRobotFloat() {
   }
 
   const margin = 16;
-
-  // Initial random position within viewport bounds
   const maxX = Math.max(window.innerWidth - numpadRobotSize.w - margin * 2, margin);
   const maxY = Math.max(window.innerHeight - numpadRobotSize.h - margin * 2, margin);
 
+  // Initial random position
   numpadRobotPos.x = Math.random() * (maxX - margin) + margin;
   numpadRobotPos.y = Math.random() * (maxY - margin) + margin;
 
-  // Random direction at a fixed speed
-  const speed = 120; // px per second
+  // 🔥 Faster base speed
+  const baseSpeed = 260; // was ~120
+
   const angle = Math.random() * Math.PI * 2;
-  numpadRobotVel.x = Math.cos(angle) * speed;
-  numpadRobotVel.y = Math.sin(angle) * speed;
+  numpadRobotVel.x = Math.cos(angle) * baseSpeed;
+  numpadRobotVel.y = Math.sin(angle) * baseSpeed;
+
+  // Sporadic behavior tuning
+  const minSpeed = 180;
+  const maxSpeed = 340;
+  const changeIntervalMin = 0.6; // seconds
+  const changeIntervalMax = 1.8;
 
   let lastTime = performance.now();
+  let nextDirChangeAt =
+    lastTime +
+    (changeIntervalMin +
+      Math.random() * (changeIntervalMax - changeIntervalMin)) *
+      1000;
 
   const step = (time) => {
-    const dt = (time - lastTime) / 1000; // seconds
+    const dt = (time - lastTime) / 1000;
     lastTime = time;
 
-    const margin = 16;
     const maxX = window.innerWidth - numpadRobotSize.w - margin;
     const maxY = window.innerHeight - numpadRobotSize.h - margin;
     const minX = margin;
@@ -1729,6 +1742,36 @@ function startNumpadRobotFloat() {
       numpadRobotVel.y *= -1;
     }
 
+    // 💥 Sporadic direction/speed changes
+    if (time >= nextDirChangeAt) {
+      // Random small turn: ±45°
+      const jitterAngle = (Math.random() * Math.PI / 2) - (Math.PI / 4);
+      const cosA = Math.cos(jitterAngle);
+      const sinA = Math.sin(jitterAngle);
+
+      const vx = numpadRobotVel.x;
+      const vy = numpadRobotVel.y;
+
+      let jx = vx * cosA - vy * sinA;
+      let jy = vx * sinA + vy * cosA;
+
+      // Randomize speed within a range
+      const targetSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+      const norm = Math.hypot(jx, jy) || 1;
+      jx = (jx / norm) * targetSpeed;
+      jy = (jy / norm) * targetSpeed;
+
+      numpadRobotVel.x = jx;
+      numpadRobotVel.y = jy;
+
+      // Schedule next change
+      const interval =
+        (changeIntervalMin +
+          Math.random() * (changeIntervalMax - changeIntervalMin)) *
+        1000;
+      nextDirChangeAt = time + interval;
+    }
+
     robot.style.left = `${numpadRobotPos.x}px`;
     robot.style.top = `${numpadRobotPos.y}px`;
 
@@ -1737,12 +1780,34 @@ function startNumpadRobotFloat() {
 
   numpadRobotFloatRAF = requestAnimationFrame(step);
 
-  // Keep the robot clamped on resize
+  // Keep him clamped when the window resizes
   window.addEventListener("resize", () => {
-    const margin = 16;
     const maxX = window.innerWidth - numpadRobotSize.w - margin;
     const maxY = window.innerHeight - numpadRobotSize.h - margin;
     numpadRobotPos.x = Math.min(Math.max(numpadRobotPos.x, margin), maxX);
     numpadRobotPos.y = Math.min(Math.max(numpadRobotPos.y, margin), maxY);
   });
+}
+
+function triggerNumpadRobotOuch() {
+  const robot = ensureNumpadRobot();
+  robot.classList.add("visible"); // make sure he’s on-screen
+  robot.classList.add("ouch");
+
+  // Briefly flash eyes in a painful color
+  if (numpadRobotEyes && numpadRobotEyes.length) {
+    numpadRobotEyes.forEach((eye) => {
+      eye.style.color = "#fecaca";
+      eye.style.backgroundColor = "#fecaca";
+      eye.classList.add("flash");
+      setTimeout(() => {
+        eye.classList.remove("flash");
+      }, 200);
+    });
+  }
+
+  // Clear the ouch state after a short delay
+  setTimeout(() => {
+    robot.classList.remove("ouch");
+  }, 500);
 }

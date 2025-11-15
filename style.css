@@ -829,15 +829,20 @@ body.has-now-playing #now-playing-fieldset {
 
 .numpad-robot {
   position: fixed;
-  /* Initial position – JS will override top/left as it starts floating */
   top: 80px;
   left: 32px;
 
   width: 110px;
   height: 110px;
-  background: #3757e4;
+  /* 🔵 Blue-ish background */
+  background: radial-gradient(
+    circle at 30% 20%,
+    #38bdf8 0,
+    #0f172a 55%,
+    #020617 100%
+  );
   border-radius: 20px;
-  border: 2px solid #4b5563;
+  border: 2px solid #38bdf8;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.8);
 
   display: flex;
@@ -853,15 +858,21 @@ body.has-now-playing #now-playing-fieldset {
 
 .numpad-robot.visible {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.numpad-robot.visible {
+  opacity: 1;
+  pointer-events: auto; /* clickable when visible */
 }
 
 .numpad-robot-face {
   position: relative;
-  width: 78%; /* was 70% */
-  height: 60%; /* was 56% */
-  background: #6b7280;
+  width: 78%;
+  height: 60%;
+  background: #020617;
   border-radius: 18px;
-  border: 2px solid #6b7280;
+  border: 2px solid #38bdf8; /* was #6b7280 */
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -917,4 +928,60 @@ body.has-now-playing #now-playing-fieldset {
   border-radius: 999px;
   background: #f97316;
   box-shadow: 0 0 10px rgba(249, 115, 22, 0.8);
+}
+
+.numpad-robot-speech {
+  position: absolute;
+  top: -26px;
+  right: -4px; /* move to the upper-right */
+  left: auto; /* stop centering */
+  transform: scale(0.8); /* no horizontal translate */
+
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(248, 113, 113, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.numpad-robot.ouch .numpad-robot-speech {
+  opacity: 1;
+  transform: scale(1); /* grow in place on the right */
+}
+
+/* make the whole robot look hurt briefly */
+.numpad-robot.ouch .numpad-robot-face {
+  border-color: #fecaca;
+  background: #7f1d1d;
+}
+
+.numpad-robot.ouch {
+  animation: numpad-robot-ouch-wiggle 0.25s ease-in-out 0s 2;
+}
+
+/* wiggle animation */
+@keyframes numpad-robot-ouch-wiggle {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-2px, -3px) rotate(-4deg);
+  }
+  50% {
+    transform: translate(3px, 1px) rotate(4deg);
+  }
+  75% {
+    transform: translate(-2px, -2px) rotate(-3deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
 }

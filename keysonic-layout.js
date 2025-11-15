@@ -1,5 +1,3 @@
-// layout.js
-
 export function getDomRefs() {
   const titleEl = document.getElementById("word-music-title");
   const wmControls = document.getElementById("wm-controls");
@@ -33,11 +31,6 @@ export function getDomRefs() {
   };
 }
 
-/**
- * Build keyboards and return:
- *  - keyElements: { code: [elements] }
- *  - keyboardEls: [mainKeyboardEl, numpadEl]
- */
 export function buildKeyboards({
   layoutMain,
   layoutNumpadGrid,
@@ -97,6 +90,27 @@ export function buildKeyboards({
 
   // ----- Numpad -----
   if (numpadContainer) {
+    const wrapper = numpadContainer.closest(".keyboard-wrapper") || null;
+
+    // Create the +/- toggle once, attached to the wrapper
+    if (wrapper && !wrapper.querySelector(".numpad-toggle")) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "numpad-toggle";
+      toggle.setAttribute("aria-label", "Toggle number pad visibility");
+      toggle.textContent = wrapper.classList.contains("numpad-collapsed")
+        ? "➕"
+        : "➖";
+
+      wrapper.appendChild(toggle);
+
+      toggle.addEventListener("click", () => {
+        const collapsed = wrapper.classList.toggle("numpad-collapsed");
+        toggle.textContent = collapsed ? "➕" : "➖";
+      });
+    }
+
+    // Rebuild numpad keys
     numpadContainer.innerHTML = "";
 
     layoutNumpadGrid.forEach((k) => {
@@ -143,10 +157,6 @@ export function buildKeyboards({
   return { keyElements, keyboardEls };
 }
 
-/**
- * Set "Now Playing" label text and spans.
- * Returns array of span elements for later highlighting.
- */
 export function setNowPlaying(nowPlayingEl, label) {
   if (!nowPlayingEl) return [];
 
@@ -220,21 +230,21 @@ export function renderSavedGrid(container, recordings) {
     loopBtn.type = "button";
     loopBtn.className = "saved-card-loop-toggle";
     loopBtn.title = "Loop this song";
-    loopBtn.style.fontSize = '0.9em';
+    loopBtn.style.fontSize = "0.9em";
     loopBtn.textContent = "⟳";
 
     const reverseBtn = document.createElement("button");
     reverseBtn.type = "button";
     reverseBtn.className = "saved-card-reverse-toggle";
     reverseBtn.title = "Play this song backwards";
-    reverseBtn.style.fontSize = '0.9em';
+    reverseBtn.style.fontSize = "0.9em";
     reverseBtn.textContent = "↺";
 
     const composeBtn = document.createElement("button");
     composeBtn.type = "button";
     composeBtn.className = "saved-card-compose-toggle";
     composeBtn.title = "Funkified";
-    composeBtn.style.fontSize = '0.8em';
+    composeBtn.style.fontSize = "0.8em";
     composeBtn.textContent = "🔥";
     composeBtn.setAttribute("aria-pressed", entry.compose ? "true" : "false");
 
@@ -242,7 +252,7 @@ export function renderSavedGrid(container, recordings) {
     delBtn.type = "button";
     delBtn.className = "saved-card-delete";
     delBtn.title = "Delete this song";
-    delBtn.style.fontSize = '1.2em';
+    delBtn.style.fontSize = "1.2em";
     delBtn.textContent = "⏏";
 
     actions.appendChild(loopBtn);

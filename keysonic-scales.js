@@ -1,8 +1,3 @@
-// keysonic-scales.js
-
-// Library of scales / moods.
-// Each entry: id, label (for future UI), steps = semitones from root.
-
 export const SCALES = {
   major: {
     id: "major",
@@ -48,17 +43,12 @@ export const SCALES = {
   }
 };
 
-
 const DEFAULT_ROOT_FREQ = 130.81; // C3: warm, clear, not tiny
 
 export function getScaleConfig(scaleId) {
   return SCALES[scaleId] || SCALES.major;
 }
 
-/**
- * Map a 0-based index into a frequency using the chosen scale.
- * idx: stable index for the key across the keyboard
- */
 export function getFrequencyForIndex(idx, scaleId = "major", rootFreq = DEFAULT_ROOT_FREQ) {
   const scale = getScaleConfig(scaleId);
   const steps = scale.steps;

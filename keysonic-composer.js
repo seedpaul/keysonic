@@ -1,12 +1,3 @@
-// keysonic-composer.js
-// Heavy-funk "composer-ify" for Keysonic.
-//
-// Adds per-word grooves, echo riffs, and bass-walk echoes.
-// Engine sees:
-//   - normal codes: "KeyA"
-//   - rests: "__REST__"
-//   - echo/bass codes: "ECHO[:B-1]:<code>" (parsed in triggerKey)
-
 export function composeFromText(codeSeq, opts = {}) {
   const {
     meter = "4/4",
@@ -210,8 +201,6 @@ export function composeFromText(codeSeq, opts = {}) {
   };
 }
 
-// ----------------- helpers -----------------
-
 function hashWordCodes(codes) {
   let h = 0;
   for (const c of codes) {
@@ -228,7 +217,6 @@ function selectContourShape(hash, baseShape) {
   return shapes[Math.abs(hash) % shapes.length];
 }
 
-// Is this keycode representing a vowel-ish letter?
 function isVowelCode(code) {
   if (!code || typeof code !== "string") return false;
   // We currently only know letter keys like "KeyA"
@@ -271,7 +259,6 @@ function centerZero(a) {
   return a.map((v) => Math.round(v - mid));
 }
 
-// Build encoded tokens for the engine
 function encodeCodeToken(code, { echo = false, bassOffset = 0 } = {}) {
   if (code === "__REST__") return "__REST__";
 
@@ -285,8 +272,6 @@ function encodeCodeToken(code, { echo = false, bassOffset = 0 } = {}) {
   return `${tags.join(":")}:${code}`;
 }
 
-// Flatten events to a stepwise code sequence
-// (Engine will ignore "__REST__" and parse ECHO/B* prefixes)
 export function flattenEventsToStepCodes(song) {
   const out = [];
   if (!song || !Array.isArray(song.events)) return out;

@@ -53,7 +53,6 @@ let playbackSequence = null; // the base sequence, always in forward order
 let playbackIndex = 0; // index of the NEXT note to play
 let playbackLabel = ""; // the word/name shown in Now Playing
 let playbackReversed = false; // are we currently moving backwards?
-let playbackStep = 0; // how many notes have been played in this run
 let currentPlaybackId = null; // which card (id) is currently playing, if any
 
 let keyOrder = [];
@@ -81,6 +80,15 @@ let savedRecordings = [];
 let tempo = 1;
 let tempoSlider;
 let tempoValueEl;
+
+let numpadRobotEl = null;
+let numpadRobotEyes = [];
+let numpadRobotHideTimer = null;
+
+let numpadRobotFloatRAF = null;
+let numpadRobotPos = { x: 0, y: 0 };
+let numpadRobotVel = { x: 0, y: 0 };
+let numpadRobotSize = { w: 110, h: 110 };
 
 let currentScaleId = "major"; // default
 let rootFreq = 220; // keep your current baseline
@@ -351,11 +359,13 @@ function handleSaveTypedClick() {
   renderSavedGrid(savedGridEl, savedRecordings);
   applyColorsToSavedTitles();
 
-  recordedSequence = [];
+  resetTypedText();                         // wipes Spell a Song box + buffers
+  nowPlayingChars = setNowPlaying(nowPlayingEl, ""); // optional: also clear Now Playing
+  updateControls();    
+
 }
 
 function handleSavedGridClick(e) {
-
   const loopBtn = e.target.closest(".saved-card-loop-toggle");
   if (loopBtn) {
     const card = loopBtn.closest(".saved-card");
@@ -550,7 +560,6 @@ function stopPlayback() {
   playbackIndex = 0;
   playbackLabel = "";
   playbackReversed = false;
-  playbackStep = 0;
   currentPlaybackId = null;
 
   nowPlayingChars = setNowPlaying(nowPlayingEl, "");
@@ -612,7 +621,6 @@ function playSequence(sequence, label, playbackId = null, reversed = false) {
   playbackSequence = sequence.slice(); // keep as-is, forward
   playbackLabel = label != null ? String(label) : "";
   playbackReversed = !!reversed;
-  playbackStep = 0;
 
   const len = playbackSequence.length;
   playbackIndex = playbackReversed ? len - 1 : 0; // start at end if reversed
@@ -837,7 +845,12 @@ function applyColorsToSavedTitles() {
     if (!titleEl) return;
 
     const name = entry.name || "";
-    const seq = Array.isArray(entry.sequence) ? entry.sequence : [];
+    // Prefer the true playback sequence (real key codes) for coloring.
+    const seq = Array.isArray(entry.playSequence)
+      ? entry.playSequence
+      : Array.isArray(entry.sequence)
+      ? entry.sequence
+      : [];
 
     titleEl.innerHTML = "";
     if (!name) return;
@@ -867,14 +880,21 @@ function applyColorsToSavedTitles() {
 }
 
 function resetTypedText() {
+  // Clear internal buffers
   typedText = "";
   typedCodeSequence = [];
-  syncTypedDisplay();
+
+  // Clear the DOM content of the Spell a Song box
+  if (typedTextEl) {
+    typedTextEl.textContent = "";
+    typedTextEl.innerHTML = "";
+  }
+
+  // Let the control state catch up (Backspace / Save buttons, etc.)
   updateControls();
 }
 
 function updateTypedTextForUserKey(code) {
-
   const ch = mapCodeToCharForTyping(code);
   if (ch !== null && ch !== undefined) {
     typedText += ch;
@@ -897,15 +917,25 @@ function syncTypedDisplay() {
   typedTextEl.innerHTML = "";
   if (!typedText) return;
 
-  for (const ch of typedText) {
+  const length = typedText.length;
+
+  for (let i = 0; i < length; i++) {
+    const ch = typedText[i];
     const span = document.createElement("span");
     span.textContent = ch;
+
     if (ch.trim() !== "") {
-      const hue = getHueForCode(ch.toUpperCase());
+      // Prefer the true key code for coloring if we have it
+      const code = Array.isArray(typedCodeSequence)
+        ? typedCodeSequence[i] || ch.toUpperCase()
+        : ch.toUpperCase();
+
+      const hue = getHueForCode(code);
       if (!isNaN(hue)) {
         span.style.color = `hsl(${hue}, 90%, 55%)`;
       }
     }
+
     typedTextEl.appendChild(span);
   }
 }
@@ -971,6 +1001,11 @@ function mapCodeToCharForTyping(code) {
     const suffix = code.slice("Numpad".length);
     if (/^[0-9]$/.test(suffix)) return suffix;
     if (suffix === "Decimal") return ".";
+    // Operators
+    if (suffix === "Add") return "+";
+    if (suffix === "Subtract") return "-";
+    if (suffix === "Multiply") return "*";
+    if (suffix === "Divide") return "/";
     return " ";
   }
 
@@ -978,16 +1013,6 @@ function mapCodeToCharForTyping(code) {
     return code;
   }
 
-  return null;
-}
-
-function mapCharToCodeFromTypedChar(ch) {
-  if (ch === " ") return " ";
-  if (/^[A-Z]$/.test(ch)) return ch;
-  if (/^[0-9]$/.test(ch)) return ch;
-  if (/^[`~!@#$%^&*()\-_=+\[\]{}\\|;:'",.<>/?]$/.test(ch)) {
-    return ch;
-  }
   return null;
 }
 
@@ -1276,28 +1301,63 @@ function spawnNoteParticleForKey(code, opts = {}) {
   const glyph = getNoteGlyphForCode(code);
   if (!glyph) return;
 
-  // 🔑 For keys with multiple physical instances (Shift, Ctrl, Alt, etc.),
-  //     create a note for EACH DOM element.
   els.forEach((keyEl) => {
-    const rect = keyEl.getBoundingClientRect();
+    let rect = keyEl.getBoundingClientRect();
+
+    // Note color based on key's hue
+    const hue = parseFloat(keyEl.dataset.hue);
+    const sat = isEcho ? 96 : 92;
+    const light = isEcho ? 60 : 64;
+    const color = !isNaN(hue) ? `hsl(${hue}, ${sat}%, ${light}%)` : null;
+
+    const isRectHidden = !rect || (rect.width === 0 && rect.height === 0);
+    const isNumpadKey =
+      typeof code === "string" && code.startsWith("Numpad");
+
+    if (isRectHidden && isNumpadKey) {
+      // 🔄 Route hidden numpad notes through the robot
+      flashNumpadRobotEyes(color);
+
+      const robot = ensureNumpadRobot();
+      const eye =
+        numpadRobotEyes && numpadRobotEyes[0] ? numpadRobotEyes[0] : robot;
+      const eRect = eye.getBoundingClientRect();
+
+      rect = {
+        left: eRect.left,
+        top: eRect.top,
+        width: eRect.width,
+        height: eRect.height,
+      };
+    } else if (isRectHidden) {
+      // Non-numpad hidden keys: fall back to a generic keyboard anchor
+      let anchor =
+        document.querySelector(".numpad-toggle") ||
+        document.getElementById("keyboard-main") ||
+        document.querySelector(".keyboard-wrapper") ||
+        document.body;
+
+      const aRect = anchor.getBoundingClientRect();
+      rect = {
+        left: aRect.right - 32,
+        top: aRect.top,
+        width: 32,
+        height: 32,
+      };
+    }
 
     const noteEl = document.createElement("div");
     noteEl.className = isEcho ? "note-float note-float-echo" : "note-float";
     noteEl.textContent = glyph;
 
-    // Color: match the key’s hue if present
-    const hue = parseFloat(keyEl.dataset.hue);
-    if (!isNaN(hue)) {
-      const sat = isEcho ? 96 : 92;
-      const light = isEcho ? 60 : 64;
-      noteEl.style.color = `hsl(${hue}, ${sat}%, ${light}%)`;
+    if (color) {
+      noteEl.style.color = color;
     }
 
-    // Horizontal flutter: small random offset left/right per key
     const dx = (Math.random() * 26 - 13).toFixed(1) + "px";
     noteEl.style.setProperty("--dx", dx);
 
-    // Position at top-center of this specific key
+    // Position at top-center of the real key or the robot eye
     noteEl.style.left = `${rect.left + rect.width / 2}px`;
     noteEl.style.top = `${rect.top}px`;
 
@@ -1307,6 +1367,7 @@ function spawnNoteParticleForKey(code, opts = {}) {
       noteEl.remove();
     }, 1200);
   });
+
 }
 
 function getScaleContextId() {
@@ -1327,7 +1388,6 @@ function getScaleContextId() {
   return "";
 }
 
-// Explicit preferences for some common keys.
 // Extend/align with your actual scale IDs as needed.
 const KEY_SIG_PREFS = {
   c_major: { prefer: "natural" },
@@ -1445,7 +1505,6 @@ function toSuperscriptDigits(num) {
     .join("");
 }
 
-//maybe later we export the "songs sentneces"
 function buildSongExportFromEntry(entry) {
   if (!entry) return null;
 
@@ -1555,4 +1614,135 @@ function getNoteGlyphForCode(code) {
   if (octaveSup) glyph += octaveSup;
 
   return glyph || "♪";
+}
+
+function ensureNumpadRobot() {
+  if (numpadRobotEl) return numpadRobotEl;
+
+  const robot = document.createElement("div");
+  robot.className = "numpad-robot";
+  robot.innerHTML = `
+    <div class="numpad-robot-face">
+      <div class="numpad-robot-eye" data-eye="left"></div>
+      <div class="numpad-robot-eye" data-eye="right"></div>
+      <div class="numpad-robot-mouth"></div>
+    </div>
+  `;
+
+  document.body.appendChild(robot);
+
+  numpadRobotEl = robot;
+  numpadRobotEyes = Array.from(
+    robot.querySelectorAll(".numpad-robot-eye")
+  );
+
+  // Start the floating animation once it's in the DOM
+  startNumpadRobotFloat();
+
+  return robot;
+}
+
+function flashNumpadRobotEyes(color) {
+  const robot = ensureNumpadRobot();
+  robot.classList.add("visible");
+
+  if (numpadRobotHideTimer) {
+    clearTimeout(numpadRobotHideTimer);
+    numpadRobotHideTimer = null;
+  }
+
+  if (numpadRobotEyes && numpadRobotEyes.length) {
+    numpadRobotEyes.forEach((eye) => {
+      if (color) {
+        eye.style.color = color; // used by .flash box-shadow
+        eye.style.backgroundColor = color;
+      }
+      eye.classList.add("flash");
+      setTimeout(() => {
+        eye.classList.remove("flash");
+      }, 180);
+    });
+  }
+
+  // hide the robot again after a short idle period
+  numpadRobotHideTimer = setTimeout(() => {
+    robot.classList.remove("visible");
+  }, 1400);
+}
+
+function startNumpadRobotFloat() {
+  const robot = ensureNumpadRobot();
+  if (numpadRobotFloatRAF !== null) return; // already running
+
+  // Measure size once we have it in the DOM
+  const rect = robot.getBoundingClientRect();
+  if (rect.width && rect.height) {
+    numpadRobotSize.w = rect.width;
+    numpadRobotSize.h = rect.height;
+  }
+
+  const margin = 16;
+
+  // Initial random position within viewport bounds
+  const maxX = Math.max(window.innerWidth - numpadRobotSize.w - margin * 2, margin);
+  const maxY = Math.max(window.innerHeight - numpadRobotSize.h - margin * 2, margin);
+
+  numpadRobotPos.x = Math.random() * (maxX - margin) + margin;
+  numpadRobotPos.y = Math.random() * (maxY - margin) + margin;
+
+  // Random direction at a fixed speed
+  const speed = 120; // px per second
+  const angle = Math.random() * Math.PI * 2;
+  numpadRobotVel.x = Math.cos(angle) * speed;
+  numpadRobotVel.y = Math.sin(angle) * speed;
+
+  let lastTime = performance.now();
+
+  const step = (time) => {
+    const dt = (time - lastTime) / 1000; // seconds
+    lastTime = time;
+
+    const margin = 16;
+    const maxX = window.innerWidth - numpadRobotSize.w - margin;
+    const maxY = window.innerHeight - numpadRobotSize.h - margin;
+    const minX = margin;
+    const minY = margin;
+
+    // Integrate position
+    numpadRobotPos.x += numpadRobotVel.x * dt;
+    numpadRobotPos.y += numpadRobotVel.y * dt;
+
+    // Bounce off edges
+    if (numpadRobotPos.x < minX) {
+      numpadRobotPos.x = minX;
+      numpadRobotVel.x *= -1;
+    } else if (numpadRobotPos.x > maxX) {
+      numpadRobotPos.x = maxX;
+      numpadRobotVel.x *= -1;
+    }
+
+    if (numpadRobotPos.y < minY) {
+      numpadRobotPos.y = minY;
+      numpadRobotVel.y *= -1;
+    } else if (numpadRobotPos.y > maxY) {
+      numpadRobotPos.y = maxY;
+      numpadRobotVel.y *= -1;
+    }
+
+    robot.style.left = `${numpadRobotPos.x}px`;
+    robot.style.top = `${numpadRobotPos.y}px`;
+
+    numpadRobotFloatRAF = requestAnimationFrame(step);
+  };
+
+  numpadRobotFloatRAF = requestAnimationFrame(step);
+
+  // Keep the robot clamped on resize
+  window.addEventListener("resize", () => {
+    const margin = 16;
+    const maxX = window.innerWidth - numpadRobotSize.w - margin;
+    const maxY = window.innerHeight - numpadRobotSize.h - margin;
+    numpadRobotPos.x = Math.min(Math.max(numpadRobotPos.x, margin), maxX);
+    numpadRobotPos.y = Math.min(Math.max(numpadRobotPos.y, margin), maxY);
+  });
 }

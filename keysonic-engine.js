@@ -314,34 +314,32 @@ function handleClearClick() {
 }
 
 function handleSaveTypedClick() {
-  const name = typedText || "";
-  if (!name) return;
-
-  let playSeq = [];
-
-  // If we have a typedCodeSequence (new behavior), use that as the true playback sequence.
-  if (typedCodeSequence && typedCodeSequence.length) {
-    playSeq = typedCodeSequence.slice();
-  } else {
-    // Fallback for legacy behavior: derive from visible characters.
-    for (const ch of name) {
-      const code = mapCharToCodeFromTypedChar(ch);
-      if (code) {
-        playSeq.push(code);
-      }
-    }
-  }
-
+  const playSeq = typedCodeSequence.slice();
   if (!playSeq.length) return;
 
-  const entryName = makeUniqueName(name);
+  // Build display sequence: action keys -> spaces, others -> themselves
+  const displaySeq = playSeq.map((code) => {
+    const ch = mapCodeToCharForTyping(code);
+    // If mapCodeToCharForTyping returns null, fall back to the raw code
+    // so we don't lose anything unexpectedly.
+    return ch !== null && ch !== undefined ? ch : code;
+  });
+
+  const rawName = typedText || "";
+  const hasNonSpace = rawName.split("").some((ch) => ch !== " ");
+
+  const baseName = hasNonSpace
+    ? rawName
+    : `Recording ${savedRecordings.length + 1}`;
+
+  const name = makeUniqueName(baseName);
 
   const entry = {
     id: makeId(),
     name,
-    // Display sequence: exactly what user sees in "Spell a Song"
-    sequence: name.split(""),
-    // Playback sequence: true keystrokes, including action keys.
+    // Human-facing view: what we show on cards, etc.
+    sequence: displaySeq,
+    // Machine-facing sequence: exact keystrokes used for playback.
     playSequence: playSeq,
     loop: false,
     reverse: false,
@@ -353,12 +351,11 @@ function handleSaveTypedClick() {
   renderSavedGrid(savedGridEl, savedRecordings);
   applyColorsToSavedTitles();
 
-  resetTypedText();
-  updateControls();
+  recordedSequence = [];
 }
 
 function handleSavedGridClick(e) {
-  
+
   const loopBtn = e.target.closest(".saved-card-loop-toggle");
   if (loopBtn) {
     const card = loopBtn.closest(".saved-card");
@@ -474,7 +471,7 @@ function handleSavedGridClick(e) {
     //    with the appropriate (composed or raw) sequence.
     if (isPlayingBack && currentPlaybackId && currentPlaybackId === id) {
       // Start from the raw recorded sequence
-      let seq = entry.sequence.slice();
+      let seq = entry.playSequence.slice();
 
       // Apply composer-ify if the toggle is now ON
       if (entry.compose && seq.length) {
@@ -510,7 +507,7 @@ function handleSavedGridClick(e) {
   }
 
   // Start from the raw code sequence we recorded
-  let seq = entry.sequence.slice();
+  let seq = entry.playSequence.slice();
 
   // If composer-ify is enabled for this card, transform it
   if (entry.compose && seq.length) {
@@ -877,17 +874,13 @@ function resetTypedText() {
 }
 
 function updateTypedTextForUserKey(code) {
-  // View-only mapping: what character should appear in "Spell a Song"?
-  const ch = mapCodeToCharForTyping(code);
 
-  // If this key contributes a visible character (including " " for action keys),
-  // append BOTH the display char and the actual code.
+  const ch = mapCodeToCharForTyping(code);
   if (ch !== null && ch !== undefined) {
     typedText += ch;
     typedCodeSequence.push(code);
 
     if (typedText.length > TYPED_MAX_LENGTH) {
-      // Trim from the front to keep the last TYPED_MAX_LENGTH chars in sync
       const overflow = typedText.length - TYPED_MAX_LENGTH;
       typedText = typedText.slice(overflow);
       typedCodeSequence = typedCodeSequence.slice(overflow);

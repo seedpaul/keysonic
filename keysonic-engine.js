@@ -64,12 +64,61 @@ const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 let themeSelect;
 
+const DEFAULT_KEY_COLOR_SETTINGS = {
+  saturation: 55,
+  lightness: 88,
+  borderSaturation: 55,
+  borderLightness: 70,
+  activeSaturation: 80,
+  activeLightness: 48,
+};
+
+let keyColorSettings = { ...DEFAULT_KEY_COLOR_SETTINGS };
+
 let keyboardView;
 let nowPlayingView;
 let savedGridView;
 let typedTextView;
 
 const getState = () => store.getState();
+
+function parseCssNumber(value, fallback) {
+  const num = parseFloat(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function refreshKeyColorSettings() {
+  const root = document.documentElement;
+  if (!root) return;
+
+  const styles = getComputedStyle(root);
+  keyColorSettings = {
+    saturation: parseCssNumber(
+      styles.getPropertyValue("--key-saturation"),
+      DEFAULT_KEY_COLOR_SETTINGS.saturation
+    ),
+    lightness: parseCssNumber(
+      styles.getPropertyValue("--key-lightness"),
+      DEFAULT_KEY_COLOR_SETTINGS.lightness
+    ),
+    borderSaturation: parseCssNumber(
+      styles.getPropertyValue("--key-border-saturation"),
+      DEFAULT_KEY_COLOR_SETTINGS.borderSaturation
+    ),
+    borderLightness: parseCssNumber(
+      styles.getPropertyValue("--key-border-lightness"),
+      DEFAULT_KEY_COLOR_SETTINGS.borderLightness
+    ),
+    activeSaturation: parseCssNumber(
+      styles.getPropertyValue("--key-active-saturation"),
+      DEFAULT_KEY_COLOR_SETTINGS.activeSaturation
+    ),
+    activeLightness: parseCssNumber(
+      styles.getPropertyValue("--key-active-lightness"),
+      DEFAULT_KEY_COLOR_SETTINGS.activeLightness
+    ),
+  };
+}
 
 function getSavedRecordings() {
   return getState().savedRecordings;
@@ -131,6 +180,7 @@ export function initKeysonic() {
   setupTitlePill();
 
   const activeThemeId = initTheme();
+  refreshKeyColorSettings();
 
   themeSelect = document.getElementById("theme-select");
   if (themeSelect) {
@@ -151,6 +201,8 @@ export function initKeysonic() {
 
     themeSelect.addEventListener("change", () => {
       const appliedId = applyTheme(themeSelect.value);
+      refreshKeyColorSettings();
+      applyBaseKeyColors();
       themeSelect.value = appliedId;
     });
   }
@@ -754,18 +806,27 @@ function getHueForCode(code) {
 }
 
 function getBaseKeyColor(hue) {
+  const { saturation, lightness } = keyColorSettings;
   // lighter pastel but more saturated → better separation between hues
-  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 55%, 88%)`;
+  return isNaN(hue)
+    ? "var(--key)"
+    : `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
 function getBaseKeyBorder(hue) {
+  const { borderSaturation, borderLightness } = keyColorSettings;
   // darker border for contrast against the base fill
-  return isNaN(hue) ? "var(--key-border)" : `hsl(${hue}, 55%, 70%)`;
+  return isNaN(hue)
+    ? "var(--key-border)"
+    : `hsl(${hue}, ${borderSaturation}%, ${borderLightness}%)`;
 }
 
 function getActiveKeyColor(hue) {
+  const { activeSaturation, activeLightness } = keyColorSettings;
   // vivid active color so pressed keys really pop
-  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 80%, 48%)`;
+  return isNaN(hue)
+    ? "var(--key)"
+    : `hsl(${hue}, ${activeSaturation}%, ${activeLightness}%)`;
 }
 
 function getFrequencyForCode(code, degreeOffset = 0) {
@@ -792,6 +853,7 @@ function getFrequencyForCode(code, degreeOffset = 0) {
 }
 
 function applyBaseKeyColors() {
+  refreshKeyColorSettings();
   if (!keyElements) return;
   Object.values(keyElements).forEach((els) => {
     els.forEach((el) => {

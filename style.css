@@ -16,6 +16,13 @@
 
   --key: #e5e7eb;
   --key-border: #cbd5e1;
+  --key-text: #0f172a;
+  --key-saturation: 55;
+  --key-lightness: 88;
+  --key-border-saturation: 55;
+  --key-border-lightness: 70;
+  --key-active-saturation: 80;
+  --key-active-lightness: 48;
 
   --border: #d1d5db;
   --border-soft: #cbd5e1;
@@ -200,7 +207,7 @@ body {
   color: var(--text);
 
   cursor: pointer;
-  transition: color var(--transition-fast), transform var(--transition-fastEST),
+  transition: color var(--transition-fast), transform var(--transition-fastest),
     opacity var(--transition-fast);
 }
 
@@ -401,13 +408,14 @@ body.has-now-playing #now-playing-fieldset {
 
   font-size: 13px;
   font-weight: 600;
+  color: var(--key-text);
   color: var(--text);
   user-select: none;
   cursor: pointer;
 
   transition: background-color var(--transition-fastest),
-    border-color var(--transition-fastest), color var(--transition-fastEST),
-    box-shadow var(--transition-fastEST), transform var(--transition-fastEST);
+    border-color var(--transition-fastest), color var(--transition-fastest),
+    box-shadow var(--transition-fastest), transform var(--transition-fastest);
 }
 
 .key.label-small {
@@ -644,7 +652,7 @@ body.has-now-playing #now-playing-fieldset {
   justify-content: center;
   transition: background-color var(--transition-fast),
     color var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fastEST), box-shadow var(--transition-fast);
+    transform var(--transition-fastest), box-shadow var(--transition-fast);
 }
 
 .saved-card-loop-toggle:hover {
@@ -679,7 +687,7 @@ body.has-now-playing #now-playing-fieldset {
   justify-content: center;
   transition: background-color var(--transition-fast),
     color var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fastEST), box-shadow var(--transition-fast);
+    transform var(--transition-fastest), box-shadow var(--transition-fast);
 }
 
 .saved-card-reverse-toggle:hover {
@@ -714,7 +722,7 @@ body.has-now-playing #now-playing-fieldset {
   justify-content: center;
   transition: background-color var(--transition-fast),
     color var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fastEST), box-shadow var(--transition-fast);
+    transform var(--transition-fastest), box-shadow var(--transition-fast);
 }
 
 .saved-card-compose-toggle:hover {

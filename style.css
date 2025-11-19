@@ -409,7 +409,6 @@ body.has-now-playing #now-playing-fieldset {
   font-size: 13px;
   font-weight: 600;
   color: var(--key-text);
-  color: var(--text);
   user-select: none;
   cursor: pointer;
 

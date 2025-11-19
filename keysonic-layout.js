@@ -174,14 +174,12 @@ export class NowPlayingView {
     return spans;
   }
 
-  tint(sequence, getHueForCode) {
+  tint(sequence, getHueForCode, getToneColor) {
     if (!this.chars?.length || !sequence?.length) return;
     this.chars.forEach((span, idx) => {
       const code = sequence[idx % sequence.length];
       const hue = getHueForCode(code);
-      if (!isNaN(hue)) {
-        span.style.color = `hsl(${hue}, 90%, 55%)`;
-      }
+      span.style.color = getToneColor ? getToneColor(hue) : `hsl(${hue}, 90%, 55%)`;
       span.style.transform = '';
       span.style.fontWeight = '600';
     });
@@ -265,7 +263,7 @@ export class SavedGridView {
     });
   }
 
-  applyTitleColors(recordings, getHueForCode) {
+  applyTitleColors(recordings, getHueForCode, getToneColor) {
     if (!this.container || !Array.isArray(recordings)) return;
     const cards = this.container.querySelectorAll('.saved-card');
     cards.forEach((card) => {
@@ -287,7 +285,7 @@ export class SavedGridView {
         const code = seq.length ? seq[index % seq.length] : ch.toUpperCase();
         const hue = getHueForCode(code);
         if (!isNaN(hue) && ch.trim() !== '') {
-          span.style.color = `hsl(${hue}, 90%, 55%)`;
+          span.style.color = getToneColor ? getToneColor(hue) : `hsl(${hue}, 90%, 55%)`;
         }
         titleEl.appendChild(span);
       }
@@ -300,7 +298,7 @@ export class TypedTextView {
     this.el = el;
   }
 
-  render(text, sequence, getHueForCode) {
+  render(text, sequence, getHueForCode, getToneColor) {
     if (!this.el) return;
     this.el.innerHTML = '';
     if (!text) return;
@@ -312,7 +310,7 @@ export class TypedTextView {
         const code = Array.isArray(sequence) ? sequence[i] || ch.toUpperCase() : ch.toUpperCase();
         const hue = getHueForCode(code);
         if (!isNaN(hue)) {
-          span.style.color = `hsl(${hue}, 90%, 55%)`;
+          span.style.color = getToneColor ? getToneColor(hue) : `hsl(${hue}, 90%, 55%)`;
         }
       }
       this.el.appendChild(span);

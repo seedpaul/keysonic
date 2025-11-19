@@ -23,6 +23,8 @@
   --key-border-lightness: 70;
   --key-active-saturation: 80;
   --key-active-lightness: 48;
+  --tone-saturation: 90;
+  --tone-lightness: 55;
 
   --border: #d1d5db;
   --border-soft: #cbd5e1;

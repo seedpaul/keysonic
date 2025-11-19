@@ -71,6 +71,8 @@ const DEFAULT_KEY_COLOR_SETTINGS = {
   borderLightness: 70,
   activeSaturation: 80,
   activeLightness: 48,
+  toneSaturation: 90,
+  toneLightness: 55,
 };
 
 let keyColorSettings = { ...DEFAULT_KEY_COLOR_SETTINGS };
@@ -116,6 +118,14 @@ function refreshKeyColorSettings() {
     activeLightness: parseCssNumber(
       styles.getPropertyValue("--key-active-lightness"),
       DEFAULT_KEY_COLOR_SETTINGS.activeLightness
+    ),
+    toneSaturation: parseCssNumber(
+      styles.getPropertyValue("--tone-saturation"),
+      DEFAULT_KEY_COLOR_SETTINGS.toneSaturation
+    ),
+    toneLightness: parseCssNumber(
+      styles.getPropertyValue("--tone-lightness"),
+      DEFAULT_KEY_COLOR_SETTINGS.toneLightness
     ),
   };
 }
@@ -306,7 +316,7 @@ export function initKeysonic() {
 
       const playbackSeq = getState().playback.sequence;
       if (playbackSeq.length) {
-        nowPlayingView.tint(playbackSeq, getHueForCode);
+        nowPlayingView.tint(playbackSeq, getHueForCode, getToneColor);
       }
 
       // optional: if a song is currently playing, you could restart it here under the new scale
@@ -360,7 +370,7 @@ function handlePlaybackStarted(snapshot) {
   const label = snapshot?.label || "";
   nowPlayingChars = nowPlayingView.setLabel(label);
   if (snapshot?.sequence?.length) {
-    nowPlayingView.tint(snapshot.sequence, getHueForCode);
+    nowPlayingView.tint(snapshot.sequence, getHueForCode, getToneColor);
   }
   applyPlaybackCardHighlight();
   updateControls();
@@ -703,7 +713,7 @@ function setupTitlePill() {
 }
 
 function applyColorsToSavedTitles() {
-  savedGridView?.applyTitleColors(getSavedRecordings(), getHueForCode);
+  savedGridView?.applyTitleColors(getSavedRecordings(), getHueForCode, getToneColor);
 }
 
 function resetTypedText() {
@@ -721,7 +731,12 @@ function updateTypedTextForUserKey(code) {
 function syncTypedDisplay() {
   if (!typedTextView) return;
   const state = getState();
-  typedTextView.render(state.typedText, state.typedCodeSequence, getHueForCode);
+  typedTextView.render(
+    state.typedText,
+    state.typedCodeSequence,
+    getHueForCode,
+    getToneColor
+  );
 }
 
 function normalizeEventToCode(e) {
@@ -819,6 +834,13 @@ function getBaseKeyBorder(hue) {
   return isNaN(hue)
     ? "var(--key-border)"
     : `hsl(${hue}, ${borderSaturation}%, ${borderLightness}%)`;
+}
+
+function getToneColor(hue) {
+  const { toneSaturation, toneLightness } = keyColorSettings;
+  return isNaN(hue)
+    ? `hsl(0, ${toneSaturation}%, ${toneLightness}%)`
+    : `hsl(${hue}, ${toneSaturation}%, ${toneLightness}%)`;
 }
 
 function getActiveKeyColor(hue) {

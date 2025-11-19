@@ -3,15 +3,14 @@ import {
   layoutMain,
   layoutNumpadGrid,
   DISTINCT_HUES,
-  STORAGE_KEY,
-  TYPED_MAX_LENGTH,
 } from "./keysonic-config.js";
 
 import {
   getDomRefs,
-  buildKeyboards,
-  setNowPlaying,
-  renderSavedGrid,
+  KeyboardView,
+  NowPlayingView,
+  SavedGridView,
+  TypedTextView,
 } from "./keysonic-layout.js";
 
 import { getFrequencyForIndex, SCALES } from "./keysonic-scales.js";
@@ -21,44 +20,17 @@ import {
   flattenEventsToStepCodes,
 } from "./keysonic-composer.js";
 
-const ACTION_CODES = new Set([
-  "Backspace",
-  "Tab",
-  "CapsLock",
-  "Shift",
-  "Control",
-  "Alt",
-  "Meta",
-  "NumLock",
-  "ScrollLock",
-  "Pause",
-  "Insert",
-  "Delete",
-  "Home",
-  "End",
-  "PageUp",
-  "PageDown",
-  "Enter",
-  "ContextMenu",
-  "Fn",
-]);
+import store from "./store/keysonic-store.js";
+import playbackService from "./services/playback-service.js";
+import audioService from "./services/audio-service.js";
+import recordingService from "./services/recording-service.js";
+import { RecordingRepository } from "./services/recording-repository.js";
 
-// ----- State -----
-let isRecording = false;
-let isPlayingBack = false;
-let recordedSequence = [];
-
-let playbackTimeoutId = null;
-let playbackSequence = null; // the base sequence, always in forward order
-let playbackIndex = 0; // index of the NEXT note to play
-let playbackLabel = ""; // the word/name shown in Now Playing
-let playbackReversed = false; // are we currently moving backwards?
-let currentPlaybackId = null; // which card (id) is currently playing, if any
+const recordingRepo = new RecordingRepository();
 
 let keyOrder = [];
 let keyElements = {};
 let keyboardEls = [];
-let audioCtx;
 
 let mainRowsContainer;
 let numpadContainer;
@@ -71,13 +43,7 @@ let nowPlayingEl;
 let savedGridEl;
 let typedBackspaceBtn;
 
-let typedText = "";
-let typedCodeSequence = [];
-
 let nowPlayingChars = [];
-let savedRecordings = [];
-
-let tempo = 1;
 let tempoSlider;
 let tempoValueEl;
 
@@ -95,6 +61,53 @@ let rootFreq = 220; // keep your current baseline
 let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
+
+let keyboardView;
+let nowPlayingView;
+let savedGridView;
+let typedTextView;
+
+const getState = () => store.getState();
+
+function getSavedRecordings() {
+  return getState().savedRecordings;
+}
+
+function setSavedRecordings(next) {
+  store.mutate((state) => {
+    state.savedRecordings = next;
+  });
+  recordingRepo.save(next);
+  savedGridView.render(next);
+  applyColorsToSavedTitles();
+  savedGridView.highlight(getState().playback.id);
+}
+
+function updateRecording(id, mutator) {
+  const next = getSavedRecordings().map((rec) => {
+    if (rec.id !== id) return rec;
+    const draft = {
+      ...rec,
+      sequence: Array.isArray(rec.sequence) ? rec.sequence.slice() : [],
+      playSequence: Array.isArray(rec.playSequence)
+        ? rec.playSequence.slice()
+        : [],
+    };
+    const updated = mutator(draft) || draft;
+    return updated;
+  });
+  setSavedRecordings(next);
+}
+
+function updateTempo(value) {
+  const next = !isNaN(value) && value > 0 ? value : 1;
+  store.mutate((state) => {
+    state.tempo = next;
+  });
+  if (tempoValueEl) {
+    tempoValueEl.textContent = next.toFixed(1) + "x";
+  }
+}
 
 // ----- Public Init -----
 
@@ -115,25 +128,16 @@ export function initKeysonic() {
   document.title = "Keysonic";
   setupTitlePill();
 
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContextCtor();
-
   tempoSlider = document.getElementById("tempo-slider");
   tempoValueEl = document.getElementById("tempo-value");
   typedBackspaceBtn = document.getElementById("typed-backspace-btn");
 
   if (tempoSlider) {
-    tempo = parseFloat(tempoSlider.value) || 1;
-    if (tempoValueEl) {
-      tempoValueEl.textContent = tempo.toFixed(1) + "x";
-    }
-
+    const initial = parseFloat(tempoSlider.value) || 1;
+    updateTempo(initial);
     tempoSlider.addEventListener("input", () => {
       const val = parseFloat(tempoSlider.value);
-      tempo = !isNaN(val) && val > 0 ? val : 1;
-      if (tempoValueEl) {
-        tempoValueEl.textContent = tempo.toFixed(1) + "x";
-      }
+      updateTempo(val);
     });
   }
 
@@ -143,7 +147,7 @@ export function initKeysonic() {
 
   computeKeyOrder();
 
-  const { keyElements: builtKeys, keyboardEls: builtBoards } = buildKeyboards({
+  keyboardView = new KeyboardView({
     layoutMain,
     layoutNumpadGrid,
     mainRowsContainer,
@@ -155,13 +159,19 @@ export function initKeysonic() {
     },
   });
 
+  const { keyElements: builtKeys, keyboardEls: builtBoards } = keyboardView.mount();
   keyElements = builtKeys;
   keyboardEls = builtBoards;
+
+  nowPlayingView = new NowPlayingView(nowPlayingEl);
+  savedGridView = new SavedGridView(savedGridEl);
+  typedTextView = new TypedTextView(typedTextEl);
 
   applyBaseKeyColors();
   wireAudioUnlock();
   wireKeyboardEvents();
   wireControlEvents();
+  wirePlaybackEvents();
 
   // --- Scale selector setup ---
   scaleSelect = document.getElementById("scale-select");
@@ -215,17 +225,22 @@ export function initKeysonic() {
       // 3) Refresh colors on the "Spell a Song" typed text
       syncTypedDisplay();
 
+      const playbackSeq = getState().playback.sequence;
+      if (playbackSeq.length) {
+        nowPlayingView.tint(playbackSeq, getHueForCode);
+      }
+
       // optional: if a song is currently playing, you could restart it here under the new scale
       // if (isPlayingBack) { stopPlayback(); /* optionally re-play last sequence */ }
     });
   }
 
   loadSavedRecordings();
-  renderSavedGrid(savedGridEl, savedRecordings);
+  savedGridView.render(store.getState().savedRecordings);
   applyColorsToSavedTitles();
 
   resetTypedText();
-  nowPlayingChars = setNowPlaying(nowPlayingEl, "");
+  nowPlayingChars = nowPlayingView.setLabel("");
   updateControls();
 }
 
@@ -256,10 +271,49 @@ function wireControlEvents() {
   }
 }
 
-function handleFirstInteraction() {
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume();
+function wirePlaybackEvents() {
+  playbackService.on("start", handlePlaybackStarted);
+  playbackService.on("stop", handlePlaybackStopped);
+  playbackService.on("step", handlePlaybackStep);
+}
+
+function handlePlaybackStarted(snapshot) {
+  const label = snapshot?.label || "";
+  nowPlayingChars = nowPlayingView.setLabel(label);
+  if (snapshot?.sequence?.length) {
+    nowPlayingView.tint(snapshot.sequence, getHueForCode);
   }
+  applyPlaybackCardHighlight();
+  updateControls();
+}
+
+function handlePlaybackStopped() {
+  nowPlayingChars = nowPlayingView.setLabel("");
+  applyPlaybackCardHighlight();
+  updateControls();
+}
+
+function handlePlaybackStep({ code, index, sequence }) {
+  triggerKey(code, { fromPlayback: true });
+  highlightPlaybackProgress(index, sequence);
+}
+
+function highlightPlaybackProgress(currentIndex, sequence) {
+  if (!sequence?.length || !nowPlayingChars.length) return;
+  const charCount = nowPlayingChars.length;
+  let hi = 0;
+  if (sequence.length === charCount) {
+    hi = currentIndex;
+  } else {
+    const denom = Math.max(sequence.length - 1, 1);
+    hi = Math.round((currentIndex / denom) * (charCount - 1));
+  }
+  hi = Math.min(Math.max(hi, 0), charCount - 1);
+  nowPlayingView.highlight(hi);
+}
+
+function handleFirstInteraction() {
+  audioService?.ensureUnlocked();
 }
 
 function handleKeydown(e) {
@@ -283,84 +337,65 @@ function handleKeydown(e) {
 
 function handleRecordClick() {
   stopPlayback();
-  recordedSequence = [];
+  recordingService.start();
   resetTypedText();
-  isRecording = true;
-  isPlayingBack = false;
-  nowPlayingChars = setNowPlaying(nowPlayingEl, "");
+  nowPlayingChars = nowPlayingView.setLabel("");
   updateControls();
 }
 
 function handleStopClick() {
   // If we're playing back, stop immediately.
-  if (isPlayingBack) {
+  if (getState().isPlayingBack) {
     stopPlayback();
     return;
   }
 
-  // If not recording, nothing to do.
-  if (!isRecording) return;
+  if (!getState().isRecording) return;
 
-  isRecording = false;
+  recordingService.stop();
 
-  if (recordedSequence.length) {
+  if (getState().recordedSequence.length) {
     autoSaveCurrentRecording();
   }
 
   resetTypedText();
-  nowPlayingChars = setNowPlaying(nowPlayingEl, "");
+  nowPlayingChars = nowPlayingView.setLabel("");
   updateControls();
 }
 
 function handleClearClick() {
-  if (isPlayingBack) return;
+  if (getState().isPlayingBack) return;
 
-  recordedSequence = [];
-  resetTypedText();
-  nowPlayingChars = setNowPlaying(nowPlayingEl, "");
+  recordingService.clear();
+  syncTypedDisplay();
+  nowPlayingChars = nowPlayingView.setLabel("");
   updateControls();
 }
 
 function handleSaveTypedClick() {
-  const playSeq = typedCodeSequence.slice();
+  const state = getState();
+  const playSeq = state.typedCodeSequence.slice();
   if (!playSeq.length) return;
 
-  // Build display sequence: action keys -> spaces, others -> themselves
-  const displaySeq = playSeq.map((code) => {
-    const ch = mapCodeToCharForTyping(code);
-    // If mapCodeToCharForTyping returns null, fall back to the raw code
-    // so we don't lose anything unexpectedly.
-    return ch !== null && ch !== undefined ? ch : code;
-  });
+  const displaySeq = recordingRepo.toDisplaySequence(playSeq);
 
-  const rawName = typedText || "";
+  const rawName = state.typedText || "";
   const hasNonSpace = rawName.split("").some((ch) => ch !== " ");
 
-  const baseName = hasNonSpace
-    ? rawName
-    : `Recording ${savedRecordings.length + 1}`;
+  const recordings = getSavedRecordings();
+  const baseName = hasNonSpace ? rawName : `Recording ${recordings.length + 1}`;
+  const name = recordingRepo.makeUniqueName(baseName, recordings);
 
-  const name = makeUniqueName(baseName);
-
-  const entry = {
-    id: makeId(),
+  const entry = recordingRepo.createRecording({
     name,
-    // Human-facing view: what we show on cards, etc.
-    sequence: displaySeq,
-    // Machine-facing sequence: exact keystrokes used for playback.
     playSequence: playSeq,
-    loop: false,
-    reverse: false,
-    compose: false,
-  };
+    displaySequence: displaySeq,
+  });
 
-  savedRecordings.push(entry);
-  persistSavedRecordings();
-  renderSavedGrid(savedGridEl, savedRecordings);
-  applyColorsToSavedTitles();
+  setSavedRecordings([...recordings, entry]);
 
-  resetTypedText(); // wipes Spell a Song box + buffers
-  nowPlayingChars = setNowPlaying(nowPlayingEl, ""); // optional: also clear Now Playing
+  resetTypedText();
+  nowPlayingChars = nowPlayingView.setLabel("");
   updateControls();
 }
 
@@ -371,16 +406,8 @@ function handleSavedGridClick(e) {
     if (!card) return;
     const id = card.dataset.id;
 
-    const entry = savedRecordings.find((r) => r.id === id);
-    if (!entry) return;
-
-    // Flip this recording's loop flag
-    entry.loop = !entry.loop;
-
-    persistSavedRecordings();
-    renderSavedGrid(savedGridEl, savedRecordings);
-    applyColorsToSavedTitles();
-    applyPlaybackCardHighlight(); // keep playing highlight in sync
+    updateRecording(id, (entry) => ({ ...entry, loop: !entry.loop }));
+    applyPlaybackCardHighlight();
 
     e.stopPropagation();
     return;
@@ -392,19 +419,15 @@ function handleSavedGridClick(e) {
     if (!card) return;
     const id = card.dataset.id;
 
-    // If this card is currently playing, stop playback immediately
-    if (currentPlaybackId === id) {
+    if (getState().playback.id === id) {
       stopPlayback();
     }
 
-    savedRecordings = savedRecordings.filter((r) => r.id !== id);
-    persistSavedRecordings();
-    renderSavedGrid(savedGridEl, savedRecordings);
-    applyColorsToSavedTitles();
-    applyPlaybackCardHighlight();
+    const next = getSavedRecordings().filter((r) => r.id !== id);
+    setSavedRecordings(next);
 
-    if (savedRecordings.length === 0) {
-      recordedSequence = [];
+    if (!next.length) {
+      recordingService.clearRecordedSequence();
       updateControls();
     }
 
@@ -417,41 +440,15 @@ function handleSavedGridClick(e) {
     const card = reverseBtn.closest(".saved-card");
     if (!card) return;
     const id = card.dataset.id;
-
-    const entry = savedRecordings.find((r) => r.id === id);
+    const recordings = getSavedRecordings();
+    const entry = recordings.find((r) => r.id === id);
     if (!entry) return;
 
-    // Toggle this recording's reverse flag
-    entry.reverse = !entry.reverse;
-
-    persistSavedRecordings();
-    renderSavedGrid(savedGridEl, savedRecordings);
-    applyColorsToSavedTitles();
+    updateRecording(id, (rec) => ({ ...rec, reverse: !rec.reverse }));
     applyPlaybackCardHighlight();
 
-    // If THIS card is currently playing, flip direction in-place
-    if (
-      isPlayingBack &&
-      currentPlaybackId === id &&
-      playbackSequence &&
-      playbackSequence.length
-    ) {
-      const len = playbackSequence.length;
-      const oldDir = playbackReversed ? -1 : 1;
-      const newReversed = !!entry.reverse;
-      const newDir = newReversed ? -1 : 1;
-
-      if (oldDir !== newDir) {
-        // lastPlayed = index we just played
-        const lastPlayed = (((playbackIndex - oldDir) % len) + len) % len;
-        playbackReversed = newReversed;
-
-        // next note should be one step in the new direction from lastPlayed
-        playbackIndex = (lastPlayed + newDir + len) % len;
-        // do NOT reset playbackStep; highlight progression continues smoothly
-      } else {
-        playbackReversed = newReversed;
-      }
+    if (getState().isPlayingBack && getState().playback.id === id) {
+      restartPlaybackFromEntry({ ...entry, reverse: !entry.reverse }, { preserveTyped: true });
     }
 
     e.stopPropagation();
@@ -463,39 +460,16 @@ function handleSavedGridClick(e) {
     const card = composeBtn.closest(".saved-card");
     if (!card) return;
     const id = card.dataset.id;
-
-    const entry = savedRecordings.find((r) => r.id === id);
+    const recordings = getSavedRecordings();
+    const entry = recordings.find((r) => r.id === id);
     if (!entry) return;
 
-    // 1) Flip this recording's Composer-ify flag
-    entry.compose = !entry.compose;
-
-    // 2) Persist + rerender UI (same pattern as loop/reverse)
-    persistSavedRecordings();
-    renderSavedGrid(savedGridEl, savedRecordings);
-    applyColorsToSavedTitles();
+    const nextCompose = !entry.compose;
+    updateRecording(id, (rec) => ({ ...rec, compose: nextCompose }));
     applyPlaybackCardHighlight();
 
-    // 3) If THIS card is currently playing, restart playback
-    //    with the appropriate (composed or raw) sequence.
-    if (isPlayingBack && currentPlaybackId && currentPlaybackId === id) {
-      // Start from the raw recorded sequence
-      let seq = entry.playSequence.slice();
-
-      // Apply composer-ify if the toggle is now ON
-      if (entry.compose && seq.length) {
-        const song = composeFromText(seq, {
-          meter: "4/4",
-          restBetweenWords: 3,
-          wordContour: "arch",
-          maxSpan: 4,
-        });
-        seq = flattenEventsToStepCodes(song);
-      }
-
-      // This will stop the old playback and immediately start
-      // the new one using the same label and reverse state.
-      playSequence(seq, entry.name, id, !!entry.reverse);
+    if (getState().isPlayingBack && getState().playback.id === id) {
+      restartPlaybackFromEntry({ ...entry, compose: nextCompose });
     }
 
     e.stopPropagation();
@@ -506,19 +480,34 @@ function handleSavedGridClick(e) {
   if (!card) return;
 
   const id = card.dataset.id;
-  const entry = savedRecordings.find((r) => r.id === id);
+  const entry = getSavedRecordings().find((r) => r.id === id);
   if (!entry || !entry.sequence.length) return;
 
   // If this card is currently playing, treat click as a STOP toggle
-  if (isPlayingBack && currentPlaybackId === id) {
+  if (getState().isPlayingBack && getState().playback.id === id) {
     stopPlayback();
     return;
   }
 
-  // Start from the raw code sequence we recorded
-  let seq = entry.playSequence.slice();
+  startPlaybackFromEntry(entry);
+}
 
-  // If composer-ify is enabled for this card, transform it
+function handleTypedBackspaceClick() {
+  const state = getState();
+  if (state.isRecording || state.isPlayingBack) return;
+  if (!state.typedText || state.typedText.length === 0) return;
+
+  store.mutate((draft) => {
+    draft.typedText = draft.typedText.slice(0, -1);
+    draft.typedCodeSequence = draft.typedCodeSequence.slice(0, -1);
+  });
+
+  syncTypedDisplay();
+  updateControls();
+}
+
+function buildPlaybackSequence(entry) {
+  let seq = entry.playSequence.slice();
   if (entry.compose && seq.length) {
     const song = composeFromText(seq, {
       meter: "4/4",
@@ -528,282 +517,85 @@ function handleSavedGridClick(e) {
     });
     seq = flattenEventsToStepCodes(song);
   }
-
-  // Start playback of this card
-  stopPlayback();
-  playSequence(seq, entry.name, id, !!entry.reverse);
+  return seq;
 }
 
-function handleTypedBackspaceClick() {
-  if (isRecording || isPlayingBack) return;
-  if (!typedText || typedText.length === 0) return;
-
-  // Remove last character from Spell a Song text
-  typedText = typedText.slice(0, -1);
-  if (typedCodeSequence.length > 0) {
-    typedCodeSequence.pop();
+function startPlaybackFromEntry(entry, { preserveTyped = false } = {}) {
+  const seq = buildPlaybackSequence(entry);
+  if (!seq.length) return;
+  if (!preserveTyped) {
+    resetTypedText();
   }
+  playbackService.play({
+    sequence: seq,
+    label: entry.name,
+    id: entry.id,
+    reversed: !!entry.reverse,
+  });
+}
 
-  syncTypedDisplay();
-  updateControls();
+function restartPlaybackFromEntry(entry, opts = {}) {
+  startPlaybackFromEntry(entry, opts);
 }
 
 function stopPlayback() {
-  if (playbackTimeoutId !== null) {
-    clearTimeout(playbackTimeoutId);
-    playbackTimeoutId = null;
-  }
-
-  isPlayingBack = false;
-  playbackSequence = null;
-  playbackIndex = 0;
-  playbackLabel = "";
-  playbackReversed = false;
-  currentPlaybackId = null;
-
-  nowPlayingChars = setNowPlaying(nowPlayingEl, "");
-  updateControls();
-  applyPlaybackCardHighlight();
-}
-
-function shouldLoopCurrent() {
-  if (!currentPlaybackId) return false;
-  const rec = savedRecordings.find((r) => r.id === currentPlaybackId);
-  return !!(rec && rec.loop);
+  playbackService.stop();
 }
 
 function updateControls() {
-  const hasNotes = recordedSequence.length > 0;
-  const hasTyped = !!(typedText && typedText.length);
+  const state = getState();
+  const hasNotes = state.recordedSequence.length > 0;
+  const hasTyped = !!state.typedText;
 
   if (recordBtn) {
-    recordBtn.disabled = isRecording || isPlayingBack;
-    recordBtn.classList.toggle("active-record", isRecording);
+    recordBtn.disabled = state.isRecording || state.isPlayingBack;
+    recordBtn.classList.toggle("active-record", state.isRecording);
   }
 
   if (stopBtn) {
-    stopBtn.disabled = !(isRecording || isPlayingBack);
+    stopBtn.disabled = !(state.isRecording || state.isPlayingBack);
   }
 
   if (clearBtn) {
-    const canClear = (hasNotes || hasTyped) && !isRecording && !isPlayingBack;
+    const canClear = (hasNotes || hasTyped) && !state.isRecording && !state.isPlayingBack;
     clearBtn.disabled = !canClear;
   }
 
   if (saveTypedBtn) {
-    saveTypedBtn.disabled = !hasTyped || isRecording || isPlayingBack;
+    saveTypedBtn.disabled = !hasTyped || state.isRecording || state.isPlayingBack;
   }
 
   if (typedBackspaceBtn) {
-    const canBackspace = hasTyped && !isRecording && !isPlayingBack;
+    const canBackspace = hasTyped && !state.isRecording && !state.isPlayingBack;
     typedBackspaceBtn.disabled = !canBackspace;
   }
 }
 
-function recordKeyStroke(code) {
-  if (isRecording && !isPlayingBack) {
-    recordedSequence.push(code);
-    updateControls();
-  }
-}
-
-function playSequence(sequence, label, playbackId = null, reversed = false) {
-  if (!sequence || !sequence.length) return;
-
-  // Clean start
-  stopPlayback();
-  resetTypedText();
-
-  isPlayingBack = true;
-  isRecording = false;
-
-  playbackSequence = sequence.slice(); // keep as-is, forward
-  playbackLabel = label != null ? String(label) : "";
-  playbackReversed = !!reversed;
-
-  const len = playbackSequence.length;
-  playbackIndex = playbackReversed ? len - 1 : 0; // start at end if reversed
-
-  if (playbackId) currentPlaybackId = playbackId;
-
-  nowPlayingChars = setNowPlaying(nowPlayingEl, playbackLabel);
-  if (len) {
-    updateNowPlayingColors(nowPlayingChars, playbackSequence);
-  }
-
-  updateControls();
-  applyPlaybackCardHighlight();
-
-  queueNextPlaybackStep();
-}
-
-function queueNextPlaybackStep() {
-  if (!isPlayingBack || !playbackSequence) {
-    stopPlayback();
-    return;
-  }
-
-  const seqLen = playbackSequence.length;
-  if (!seqLen) {
-    stopPlayback();
-    return;
-  }
-
-  // If we're out of bounds, decide whether to loop or end.
-  if (playbackIndex < 0 || playbackIndex >= seqLen) {
-    if (!shouldLoopCurrent || !shouldLoopCurrent()) {
-      const tail = 200 / (tempo || 1);
-      playbackTimeoutId = setTimeout(() => {
-        stopPlayback();
-      }, tail);
-      return;
-    }
-
-    // Wrap for looping based on current direction
-    playbackIndex = playbackReversed ? seqLen - 1 : 0;
-  }
-
-  // Use a stable local index for this step
-  const currentIndex = playbackIndex;
-  const code = playbackSequence[currentIndex];
-
-  // Play this note (keys + audio)
-  triggerKey(code, { fromPlayback: true });
-
-  // ----- NOW PLAYING HIGHLIGHT -----
-  // Match the visual highlight to the same logical index we're using for notes.
-  if (playbackLabel && nowPlayingChars && nowPlayingChars.length) {
-    const charCount = nowPlayingChars.length;
-
-    if (charCount > 0) {
-      let hi;
-
-      if (seqLen === charCount) {
-        // 1:1: note index maps directly to character index
-        hi = currentIndex;
-      } else {
-        // Different lengths: map proportionally so it feels aligned
-        const denom = Math.max(seqLen - 1, 1);
-        hi = Math.round((currentIndex / denom) * (charCount - 1));
-      }
-
-      // Clamp into range
-      if (hi < 0) hi = 0;
-      if (hi >= charCount) hi = charCount - 1;
-
-      updateNowPlayingColors(nowPlayingChars, playbackSequence);
-      highlightNowPlayingIndex(nowPlayingChars, hi);
-    }
-  }
-  // ----- END HIGHLIGHT -----
-
-  // Advance index for the NEXT step based on current direction.
-  if (playbackReversed) {
-    playbackIndex = currentIndex - 1;
-  } else {
-    playbackIndex = currentIndex + 1;
-  }
-
-  // Schedule next step using live tempo
-  const baseStep = 220;
-  const stepMs = baseStep / (tempo || 1);
-  playbackTimeoutId = setTimeout(queueNextPlaybackStep, stepMs);
-}
+// playbackService now owns scheduling logic.
 
 function autoSaveCurrentRecording() {
-  const playSeq = [...recordedSequence];
+  const playSeq = getState().recordedSequence.slice();
   if (!playSeq.length) return;
 
-  // Build display sequence: action keys -> spaces, others -> themselves
-  const displaySeq = playSeq.map((code) => {
-    const ch = mapCodeToCharForTyping(code);
-    // If mapCodeToCharForTyping returns null, fall back to the raw code
-    // so we don't lose anything unexpectedly.
-    return ch !== null && ch !== undefined ? ch : code;
+  const displaySeq = recordingRepo.toDisplaySequence(playSeq);
+  const rawName = getState().typedText || "";
+  const hasNonSpace = rawName.split("").some((ch) => ch !== " ");
+  const recordings = getSavedRecordings();
+  const baseName = hasNonSpace ? rawName : `Recording ${recordings.length + 1}`;
+  const name = recordingRepo.makeUniqueName(baseName, recordings);
+  const entry = recordingRepo.createRecording({
+    name,
+    playSequence: playSeq,
+    displaySequence: displaySeq,
   });
 
-  const rawName = typedText || "";
-  const hasNonSpace = rawName.split("").some((ch) => ch !== " ");
-
-  const baseName = hasNonSpace
-    ? rawName
-    : `Recording ${savedRecordings.length + 1}`;
-
-  const name = makeUniqueName(baseName);
-
-  const entry = {
-    id: makeId(),
-    name,
-    // Human-facing view: what we show on cards, etc.
-    sequence: displaySeq,
-    // Machine-facing sequence: exact keystrokes used for playback.
-    playSequence: playSeq,
-    loop: false,
-    reverse: false,
-    compose: false,
-  };
-
-  savedRecordings.push(entry);
-  persistSavedRecordings();
-  renderSavedGrid(savedGridEl, savedRecordings);
-  applyColorsToSavedTitles();
-
-  recordedSequence = [];
+  setSavedRecordings([...recordings, entry]);
+  recordingService.clearRecordedSequence();
 }
 
 function loadSavedRecordings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      savedRecordings = [];
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      savedRecordings = parsed
-        .filter((r) => r && Array.isArray(r.sequence) && r.sequence.length)
-        .map((r) => {
-          const hasPlay =
-            Array.isArray(r.playSequence) && r.playSequence.length;
-
-          // If playSequence is missing, assume old format where sequence was used for playback.
-          const playSequence = hasPlay
-            ? r.playSequence.slice()
-            : r.sequence.slice();
-
-          // For display, prefer existing sequence; if missing, derive from playSequence.
-          let displaySequence;
-          if (Array.isArray(r.sequence) && r.sequence.length) {
-            displaySequence = r.sequence.slice();
-          } else {
-            displaySequence = playSequence.map((code) => {
-              const ch = mapCodeToCharForTyping(code);
-              return ch !== null && ch !== undefined ? ch : code;
-            });
-          }
-
-          return {
-            ...r,
-            sequence: displaySequence,
-            playSequence,
-            loop: !!r.loop,
-            reverse: !!r.reverse,
-          };
-        });
-    } else {
-      savedRecordings = [];
-    }
-  } catch {
-    savedRecordings = [];
-  }
-}
-
-function persistSavedRecordings() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecordings));
-  } catch {
-    // ignore
-  }
+  const recordings = recordingRepo.load();
+  setSavedRecordings(recordings);
 }
 
 function setupTitlePill() {
@@ -832,187 +624,25 @@ function setupTitlePill() {
 }
 
 function applyColorsToSavedTitles() {
-  if (!savedGridEl || !Array.isArray(savedRecordings)) return;
-
-  const cards = savedGridEl.querySelectorAll(".saved-card");
-  cards.forEach((card) => {
-    const id = card.dataset.id;
-    const entry = savedRecordings.find((r) => r.id === id);
-    if (!entry) return;
-
-    const titleEl = card.querySelector(".saved-card-title");
-    if (!titleEl) return;
-
-    const name = entry.name || "";
-    // Prefer the true playback sequence (real key codes) for coloring.
-    const seq = Array.isArray(entry.playSequence)
-      ? entry.playSequence
-      : Array.isArray(entry.sequence)
-      ? entry.sequence
-      : [];
-
-    titleEl.innerHTML = "";
-    if (!name) return;
-
-    const chars = [...name];
-    const seqLen = seq.length;
-
-    chars.forEach((ch, index) => {
-      const span = document.createElement("span");
-      span.textContent = ch;
-
-      let hue = NaN;
-      if (seqLen > 0) {
-        const code = seq[index % seqLen];
-        hue = getHueForCode(code);
-      } else {
-        hue = getHueForCode(ch.toUpperCase());
-      }
-
-      if (!isNaN(hue) && ch.trim() !== "") {
-        span.style.color = `hsl(${hue}, 90%, 55%)`;
-      }
-
-      titleEl.appendChild(span);
-    });
-  });
+  savedGridView?.applyTitleColors(getSavedRecordings(), getHueForCode);
 }
 
 function resetTypedText() {
-  // Clear internal buffers
-  typedText = "";
-  typedCodeSequence = [];
-
-  // Clear the DOM content of the Spell a Song box
-  if (typedTextEl) {
-    typedTextEl.textContent = "";
-    typedTextEl.innerHTML = "";
-  }
-
-  // Let the control state catch up (Backspace / Save buttons, etc.)
+  recordingService.resetTyped();
+  typedTextView?.clear();
   updateControls();
 }
 
 function updateTypedTextForUserKey(code) {
-  const ch = mapCodeToCharForTyping(code);
-  if (ch !== null && ch !== undefined) {
-    typedText += ch;
-    typedCodeSequence.push(code);
-
-    if (typedText.length > TYPED_MAX_LENGTH) {
-      const overflow = typedText.length - TYPED_MAX_LENGTH;
-      typedText = typedText.slice(overflow);
-      typedCodeSequence = typedCodeSequence.slice(overflow);
-    }
-  }
-
+  recordingService.appendTyped(code);
   syncTypedDisplay();
   updateControls();
 }
 
 function syncTypedDisplay() {
-  if (!typedTextEl) return;
-
-  typedTextEl.innerHTML = "";
-  if (!typedText) return;
-
-  const length = typedText.length;
-
-  for (let i = 0; i < length; i++) {
-    const ch = typedText[i];
-    const span = document.createElement("span");
-    span.textContent = ch;
-
-    if (ch.trim() !== "") {
-      // Prefer the true key code for coloring if we have it
-      const code = Array.isArray(typedCodeSequence)
-        ? typedCodeSequence[i] || ch.toUpperCase()
-        : ch.toUpperCase();
-
-      const hue = getHueForCode(code);
-      if (!isNaN(hue)) {
-        span.style.color = `hsl(${hue}, 90%, 55%)`;
-      }
-    }
-
-    typedTextEl.appendChild(span);
-  }
-}
-
-function updateNowPlayingColors(chars, sequence) {
-  if (!chars || !chars.length) return;
-  const seqLen = sequence.length;
-  if (!seqLen) return;
-
-  chars.forEach((span, idx) => {
-    const code = sequence[idx % seqLen];
-    const hue = getHueForCode(code);
-    if (!isNaN(hue)) {
-      span.style.color = `hsl(${hue}, 90%, 55%)`;
-    }
-    span.style.transform = "";
-    span.style.fontWeight = "600";
-  });
-}
-
-function highlightNowPlayingIndex(chars, activeIndex) {
-  if (!chars || !chars.length) return;
-
-  chars.forEach((span, idx) => {
-    if (idx === activeIndex) {
-      span.style.transform = "translateY(-1px) scale(1.25)";
-      span.style.fontWeight = "800";
-    } else {
-      span.style.transform = "";
-      span.style.fontWeight = "600";
-    }
-  });
-}
-
-function mapCodeToCharForTyping(code) {
-  const actionAsSpace = new Set([
-    "Backspace",
-    "Tab",
-    "CapsLock",
-    "Shift",
-    "Control",
-    "Alt",
-    "Meta",
-    "NumLock",
-    "ScrollLock",
-    "Pause",
-    "Insert",
-    "Delete",
-    "Home",
-    "End",
-    "PageUp",
-    "PageDown",
-    "Enter",
-    "ContextMenu",
-    "Fn",
-  ]);
-
-  if (code === " ") return " ";
-  if (actionAsSpace.has(code)) return " ";
-  if (code.startsWith("Arrow")) return " ";
-
-  if (code.startsWith("Numpad")) {
-    const suffix = code.slice("Numpad".length);
-    if (/^[0-9]$/.test(suffix)) return suffix;
-    if (suffix === "Decimal") return ".";
-    // Operators
-    if (suffix === "Add") return "+";
-    if (suffix === "Subtract") return "-";
-    if (suffix === "Multiply") return "*";
-    if (suffix === "Divide") return "/";
-    return " ";
-  }
-
-  if (code.length === 1 && code >= " " && code <= "~") {
-    return code;
-  }
-
-  return null;
+  if (!typedTextView) return;
+  const state = getState();
+  typedTextView.render(state.typedText, state.typedCodeSequence, getHueForCode);
 }
 
 function normalizeEventToCode(e) {
@@ -1163,22 +793,8 @@ function resetKeyboardShadow() {
 function playTone(code, opts = {}) {
   const { degreeOffset = 0 } = opts;
   const freq = getFrequencyForCode(code, degreeOffset);
-  if (!freq || !audioCtx) return;
-
-  const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(freq, now);
-
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.5, now + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + 0.26);
+  if (!freq || !audioService) return;
+  audioService.playFrequency(freq);
 }
 
 function flashKey(code, { isEcho = false } = {}) {
@@ -1248,7 +864,7 @@ function triggerKey(rawCode, { fromPlayback = false } = {}) {
     // Live typing / recording:
     // - store the real code in recordedSequence
     // - update Spell a Song text (which maps action keys -> spaces)
-    recordKeyStroke(code);
+    recordingService.recordKey(code);
     updateTypedTextForUserKey(code);
   }
 
@@ -1260,28 +876,8 @@ function triggerKey(rawCode, { fromPlayback = false } = {}) {
   flashKey(code, { isEcho });
 }
 
-function makeId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-function makeUniqueName(base) {
-  let name = base || "Recording";
-  let i = 2;
-  const existing = new Set(savedRecordings.map((r) => r.name));
-  while (existing.has(name)) {
-    name = `${base} (${i++})`;
-  }
-  return name;
-}
-
 function applyPlaybackCardHighlight() {
-  if (!savedGridEl) return;
-  const cards = savedGridEl.querySelectorAll(".saved-card");
-  cards.forEach((card) => {
-    const id = card.dataset.id;
-    const isPlayingCard = currentPlaybackId && id === currentPlaybackId;
-    card.classList.toggle("playing", !!isPlayingCard);
-  });
+  savedGridView?.highlight(getState().playback.id);
 }
 
 // musical symbols******************************************
@@ -1517,7 +1113,8 @@ function buildSongExportFromEntry(entry) {
   }
 
   const keyId = getScaleContextId() || null;
-  const tempoBpm = typeof tempo === "number" && tempo > 0 ? tempo : 120;
+  const liveTempo = getState().tempo;
+  const tempoBpm = typeof liveTempo === "number" && liveTempo > 0 ? liveTempo : 120;
 
   const events = [];
 

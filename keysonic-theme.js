@@ -44,9 +44,9 @@ const THEMES = [
     id: "midnight",
     label: "Midnight Neon",
     values: {
-      "--bg": "#030712",
+      "--bg": "#0a0f1f",
       "--body-bg-image":
-        "linear-gradient(rgba(2,6,23,0.85), rgba(2,6,23,0.95)), url(\"assets/spooky1.jpg\")",
+        "linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url(\"assets/spooky1.jpg\")",
       "--panel": "rgba(3, 7, 18, 0.86)",
       "--panel-strong": "rgba(15, 23, 42, 0.88)",
       "--panel-shadow": "0 8px 22px rgba(2, 6, 23, 0.85)",

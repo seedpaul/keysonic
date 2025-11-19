@@ -71,44 +71,6 @@ let typedTextView;
 
 const getState = () => store.getState();
 
-function parseCssNumber(value, fallback) {
-  const num = parseFloat(value);
-  return Number.isFinite(num) ? num : fallback;
-}
-
-function refreshKeyColorSettings() {
-  const root = document.documentElement;
-  if (!root) return;
-
-  const styles = getComputedStyle(root);
-  keyColorSettings = {
-    saturation: parseCssNumber(
-      styles.getPropertyValue("--key-saturation"),
-      DEFAULT_KEY_COLOR_SETTINGS.saturation
-    ),
-    lightness: parseCssNumber(
-      styles.getPropertyValue("--key-lightness"),
-      DEFAULT_KEY_COLOR_SETTINGS.lightness
-    ),
-    borderSaturation: parseCssNumber(
-      styles.getPropertyValue("--key-border-saturation"),
-      DEFAULT_KEY_COLOR_SETTINGS.borderSaturation
-    ),
-    borderLightness: parseCssNumber(
-      styles.getPropertyValue("--key-border-lightness"),
-      DEFAULT_KEY_COLOR_SETTINGS.borderLightness
-    ),
-    activeSaturation: parseCssNumber(
-      styles.getPropertyValue("--key-active-saturation"),
-      DEFAULT_KEY_COLOR_SETTINGS.activeSaturation
-    ),
-    activeLightness: parseCssNumber(
-      styles.getPropertyValue("--key-active-lightness"),
-      DEFAULT_KEY_COLOR_SETTINGS.activeLightness
-    ),
-  };
-}
-
 function getSavedRecordings() {
   return getState().savedRecordings;
 }
@@ -792,27 +754,18 @@ function getHueForCode(code) {
 }
 
 function getBaseKeyColor(hue) {
-  const { saturation, lightness } = keyColorSettings;
   // lighter pastel but more saturated → better separation between hues
-  return isNaN(hue)
-    ? "var(--key)"
-    : `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 55%, 88%)`;
 }
 
 function getBaseKeyBorder(hue) {
-  const { borderSaturation, borderLightness } = keyColorSettings;
   // darker border for contrast against the base fill
-  return isNaN(hue)
-    ? "var(--key-border)"
-    : `hsl(${hue}, ${borderSaturation}%, ${borderLightness}%)`;
+  return isNaN(hue) ? "var(--key-border)" : `hsl(${hue}, 55%, 70%)`;
 }
 
 function getActiveKeyColor(hue) {
-  const { activeSaturation, activeLightness } = keyColorSettings;
   // vivid active color so pressed keys really pop
-  return isNaN(hue)
-    ? "var(--key)"
-    : `hsl(${hue}, ${activeSaturation}%, ${activeLightness}%)`;
+  return isNaN(hue) ? "var(--key)" : `hsl(${hue}, 80%, 48%)`;
 }
 
 function getFrequencyForCode(code, degreeOffset = 0) {
@@ -839,7 +792,6 @@ function getFrequencyForCode(code, degreeOffset = 0) {
 }
 
 function applyBaseKeyColors() {
-  refreshKeyColorSettings();
   if (!keyElements) return;
   Object.values(keyElements).forEach((els) => {
     els.forEach((el) => {

@@ -1,5 +1,26 @@
 // keysonic-config.js
 
+/**
+ * @typedef {Object} MainKey
+ * @property {string} label
+ * @property {string} code
+ * @property {number} [span]
+ * @property {boolean} [small]
+ * @property {boolean} [space]
+ */
+
+/**
+ * @typedef {Object} NumpadKey
+ * @property {string} label
+ * @property {string} code
+ * @property {number} r
+ * @property {number} c
+ * @property {number} [rowSpan]
+ * @property {number} [colSpan]
+ * @property {boolean} [small]
+ */
+
+/** @type {MainKey[][]} */
 export const layoutMain = [
   [
     { label: "`", code: "`" },
@@ -76,6 +97,7 @@ export const layoutMain = [
   ]
 ];
 
+/** @type {NumpadKey[]} */
 export const layoutNumpadGrid = [
   { label: "Num",   code: "NumLock",        r: 1, c: 1, small: true },
   { label: "/",     code: "NumpadDivide",   r: 1, c: 2 },

@@ -1,3 +1,13 @@
+/**
+ * @typedef {Object} ScaleConfig
+ * @property {string} id
+ * @property {string} label
+ * @property {number[]} steps
+ * @property {number} offset
+ * @property {number} octaves
+ */
+
+/** @type {Record<string, ScaleConfig>} */
 export const SCALES = {
   major: {
     id: "major",
@@ -45,10 +55,19 @@ export const SCALES = {
 
 const DEFAULT_ROOT_FREQ = 130.81; // C3: warm, clear, not tiny
 
+/**
+ * @param {string} scaleId
+ * @returns {ScaleConfig}
+ */
 export function getScaleConfig(scaleId) {
   return SCALES[scaleId] || SCALES.major;
 }
 
+/**
+ * @param {number} idx
+ * @param {string} [scaleId]
+ * @param {number} [rootFreq]
+ */
 export function getFrequencyForIndex(idx, scaleId = "major", rootFreq = DEFAULT_ROOT_FREQ) {
   const scale = getScaleConfig(scaleId);
   const steps = scale.steps;

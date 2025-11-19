@@ -25,6 +25,7 @@ import playbackService from "./services/playback-service.js";
 import audioService from "./services/audio-service.js";
 import recordingService from "./services/recording-service.js";
 import { RecordingRepository } from "./services/recording-repository.js";
+import { getThemeOptions, initTheme, applyTheme } from "./keysonic-theme.js";
 
 const recordingRepo = new RecordingRepository();
 
@@ -61,6 +62,7 @@ let rootFreq = 220; // keep your current baseline
 let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
+let themeSelect;
 
 let keyboardView;
 let nowPlayingView;
@@ -127,6 +129,31 @@ export function initKeysonic() {
 
   document.title = "Keysonic";
   setupTitlePill();
+
+  const activeThemeId = initTheme();
+
+  themeSelect = document.getElementById("theme-select");
+  if (themeSelect) {
+    const options = getThemeOptions();
+    themeSelect.innerHTML = "";
+    options.forEach(({ id, label }) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = label;
+      themeSelect.appendChild(opt);
+    });
+
+    if (options.some((opt) => opt.id === activeThemeId)) {
+      themeSelect.value = activeThemeId;
+    } else if (options.length) {
+      themeSelect.value = options[0].id;
+    }
+
+    themeSelect.addEventListener("change", () => {
+      const appliedId = applyTheme(themeSelect.value);
+      themeSelect.value = appliedId;
+    });
+  }
 
   tempoSlider = document.getElementById("tempo-slider");
   tempoValueEl = document.getElementById("tempo-value");

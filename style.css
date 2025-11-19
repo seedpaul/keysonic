@@ -16,13 +16,6 @@
 
   --key: #e5e7eb;
   --key-border: #cbd5e1;
-  --key-text: #0f172a;
-  --key-saturation: 55;
-  --key-lightness: 88;
-  --key-border-saturation: 55;
-  --key-border-lightness: 70;
-  --key-active-saturation: 80;
-  --key-active-lightness: 48;
 
   --border: #d1d5db;
   --border-soft: #cbd5e1;
@@ -408,7 +401,7 @@ body.has-now-playing #now-playing-fieldset {
 
   font-size: 13px;
   font-weight: 600;
-  color: var(--key-text);
+  color: var(--text);
   user-select: none;
   cursor: pointer;
 

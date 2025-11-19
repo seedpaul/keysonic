@@ -64,17 +64,6 @@ const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 let themeSelect;
 
-const DEFAULT_KEY_COLOR_SETTINGS = {
-  saturation: 55,
-  lightness: 88,
-  borderSaturation: 55,
-  borderLightness: 70,
-  activeSaturation: 80,
-  activeLightness: 48,
-};
-
-let keyColorSettings = { ...DEFAULT_KEY_COLOR_SETTINGS };
-
 let keyboardView;
 let nowPlayingView;
 let savedGridView;
@@ -180,7 +169,6 @@ export function initKeysonic() {
   setupTitlePill();
 
   const activeThemeId = initTheme();
-  refreshKeyColorSettings();
 
   themeSelect = document.getElementById("theme-select");
   if (themeSelect) {
@@ -201,8 +189,6 @@ export function initKeysonic() {
 
     themeSelect.addEventListener("change", () => {
       const appliedId = applyTheme(themeSelect.value);
-      refreshKeyColorSettings();
-      applyBaseKeyColors();
       themeSelect.value = appliedId;
     });
   }

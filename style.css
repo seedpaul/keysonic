@@ -789,6 +789,7 @@ body.has-now-playing #now-playing-fieldset {
   color: var(--muted-text);
 }
 .scale-label,
+.instrument-label,
 .theme-label {
   display: inline-flex;
   align-items: center;
@@ -808,6 +809,7 @@ body.has-now-playing #now-playing-fieldset {
 }
 
 .scale-label select,
+.instrument-label select,
 .theme-label select {
   font-size: 14px;
   line-height: 1;

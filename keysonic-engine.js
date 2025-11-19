@@ -61,8 +61,10 @@ let currentScaleId = "major"; // default
 let rootFreq = 220; // keep your current baseline
 let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
+const INSTRUMENT_PREF_KEY = "keysonic-instrument-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 let themeSelect;
+let instrumentSelect;
 
 const DEFAULT_KEY_COLOR_SETTINGS = {
   saturation: 55,
@@ -83,6 +85,18 @@ let savedGridView;
 let typedTextView;
 
 const getState = () => store.getState();
+
+function applyInstrument(id) {
+  const sanitized = id || "piano";
+  if (audioService?.setInstrument) {
+    audioService.setInstrument(sanitized === "legacy" ? "sine" : sanitized);
+  }
+  try {
+    localStorage.setItem(INSTRUMENT_PREF_KEY, sanitized);
+  } catch (err) {
+    // ignore storage issues
+  }
+}
 
 function parseCssNumber(value, fallback) {
   const num = parseFloat(value);
@@ -193,6 +207,7 @@ export function initKeysonic() {
   refreshKeyColorSettings();
 
   themeSelect = document.getElementById("theme-select");
+  instrumentSelect = document.getElementById("instrument-select");
   if (themeSelect) {
     const options = getThemeOptions();
     themeSelect.innerHTML = "";
@@ -214,6 +229,31 @@ export function initKeysonic() {
       refreshKeyColorSettings();
       applyBaseKeyColors();
       themeSelect.value = appliedId;
+    });
+  }
+
+  if (instrumentSelect) {
+    const instruments = [
+      { id: "piano", label: "Piano" },
+      { id: "trumpet", label: "Trumpet" },
+      { id: "bass", label: "Bass" },
+      { id: "guitar", label: "Electric Guitar" },
+      { id: "drums", label: "Drums" },
+      { id: "legacy", label: "Classic Synth" },
+    ];
+    instrumentSelect.innerHTML = "";
+    instruments.forEach(({ id, label }) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = label;
+      instrumentSelect.appendChild(opt);
+    });
+    const savedInstrument = localStorage.getItem(INSTRUMENT_PREF_KEY) || "piano";
+    instrumentSelect.value = savedInstrument;
+    applyInstrument(savedInstrument);
+
+    instrumentSelect.addEventListener("change", () => {
+      applyInstrument(instrumentSelect.value);
     });
   }
 

@@ -7,7 +7,7 @@ const THEMES = [
     values: {
       "--bg": "#f8fafc",
       "--body-bg-image":
-        "linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02)), url(\"assets/cartoon-style-musical-notes-background.jpg\")",
+        'linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02)), url("assets/cartoon-style-musical-notes-background.jpg")',
       "--panel": "rgba(255, 255, 255, 0.96)",
       "--panel-strong": "#ffffff",
       "--panel-shadow": "0 1px 4px rgba(15, 23, 42, 0.12)",
@@ -46,7 +46,7 @@ const THEMES = [
     values: {
       "--bg": "#0a0f1f",
       "--body-bg-image":
-        "linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url(\"assets/spooky1.jpg\")",
+        'linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url("assets/midnight_neon_miami.png")',
       "--panel": "rgba(3, 7, 18, 0.86)",
       "--panel-strong": "rgba(15, 23, 42, 0.88)",
       "--panel-shadow": "0 8px 22px rgba(2, 6, 23, 0.85)",
@@ -80,12 +80,12 @@ const THEMES = [
     },
   },
   {
-    id: "aurora",
-    label: "Aurora Mist",
+    id: "sands",
+    label: "Sonic Sands",
     values: {
       "--bg": "#0f172a",
       "--body-bg-image":
-        "linear-gradient(rgba(79,70,229,0.5), rgba(14,165,233,0.35)), url(\"assets/anime-style-clouds.jpg\")",
+        'linear-gradient(rgba(79,70,229,0.5), rgba(14,165,233,0.35)), url("assets/anime-style-clouds.jpg")',
       "--panel": "rgba(15, 23, 42, 0.72)",
       "--panel-strong": "rgba(30, 41, 59, 0.85)",
       "--panel-shadow": "0 8px 20px rgba(15, 23, 42, 0.5)",
@@ -116,6 +116,53 @@ const THEMES = [
       "--danger-bg": "rgba(244, 114, 182, 0.25)",
       "--danger-border": "#f472b6",
       "--danger-text": "#ffe4e6",
+    },
+  },
+  {
+    id: "winter",
+    label: "Winter Chill",
+    values: {
+      "--bg": "#020617",
+      "--body-bg-image":
+        'linear-gradient(rgba(15,23,42,0.70), rgba(15,23,42,0.95)), url("assets/winter_chill.png")',
+      "--panel": "rgba(15, 23, 42, 0.78)",
+      "--panel-strong": "rgba(15, 23, 42, 0.92)",
+      "--panel-shadow": "0 10px 24px rgba(15, 23, 42, 0.75)",
+      "--panel-shadow-strong": "0 14px 32px rgba(15, 23, 42, 0.9)",
+      "--border": "rgba(191, 219, 254, 0.55)", // icy blue
+      "--border-soft": "rgba(191, 219, 254, 0.35)",
+      "--text": "#e5f2ff",
+      "--muted-text": "#cbd5f5",
+      "--muted-strong": "#e0f2fe",
+
+      "--control-bg": "rgba(15, 23, 42, 0.85)",
+      "--control-border": "rgba(191, 219, 254, 0.55)",
+      "--control-text": "#e5f2ff",
+      "--control-hover-bg": "rgba(30, 64, 175, 0.45)",
+      "--control-hover-border": "#60a5fa",
+
+      // Keys = frosty white with subtle blue borders
+      "--key": "rgba(248, 250, 252, 0.96)",
+      "--key-border": "rgba(191, 219, 254, 0.95)",
+      "--key-text": "#0f172a",
+
+      "--key-saturation": 42,
+      "--key-lightness": 92,
+      "--key-border-saturation": 34,
+      "--key-border-lightness": 78,
+      "--key-active-saturation": 70,
+      "--key-active-lightness": 60,
+
+      // Tone colors: cool ice-blue scale
+      "--tone-saturation": 72,
+      "--tone-lightness": 68,
+
+      "--accent": "#bfdbfe", // soft ice blue
+      "--accent-strong": "#60a5fa", // stronger winter blue
+
+      "--danger-bg": "rgba(248, 113, 113, 0.16)",
+      "--danger-border": "#fecaca",
+      "--danger-text": "#fee2e2",
     },
   },
 ];

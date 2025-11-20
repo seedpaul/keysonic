@@ -46,7 +46,7 @@ const THEMES = [
     values: {
       "--bg": "#0a0f1f",
       "--body-bg-image":
-        'linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url("assets/midnight_neon.png")',
+        'linear-gradient(rgba(6,11,26,0.25), rgba(6,11,26,0.4)), url("assets/midnight_neon.png")',
       "--panel": "rgba(3, 7, 18, 0.86)",
       "--panel-strong": "rgba(15, 23, 42, 0.88)",
       "--panel-shadow": "0 8px 22px rgba(2, 6, 23, 0.85)",
@@ -85,7 +85,7 @@ const THEMES = [
     values: {
       "--bg": "#0f172a",
       "--body-bg-image":
-        'linear-gradient(rgba(79,70,229,0.5), rgba(14,165,233,0.35)), url("assets/sonic_sands.png")',
+        'linear-gradient(rgba(79,70,229,0.22), rgba(14,165,233,0.18)), url("assets/sonic_sands.png")',
       "--panel": "rgba(15, 23, 42, 0.72)",
       "--panel-strong": "rgba(30, 41, 59, 0.85)",
       "--panel-shadow": "0 8px 20px rgba(15, 23, 42, 0.5)",
@@ -124,7 +124,7 @@ const THEMES = [
     values: {
       "--bg": "#0a1834",
       "--body-bg-image":
-        'linear-gradient(rgba(15,23,42,0.38), rgba(15,23,42,0.58)), url("assets/winter_chill.png")',
+        'linear-gradient(rgba(15,23,42,0.18), rgba(15,23,42,0.3)), url("assets/winter_chill.png")',
       "--panel": "rgba(15, 23, 42, 0.62)",
       "--panel-strong": "rgba(15, 23, 42, 0.78)",
       "--panel-shadow": "0 10px 24px rgba(15, 23, 42, 0.75)",
@@ -142,21 +142,23 @@ const THEMES = [
       "--control-hover-border": "#60a5fa",
 
       // Keys = brighter frost with crisper blue edges
-      "--key": "rgba(248, 250, 252, 0.99)",
-      "--key-border": "rgba(191, 219, 254, 0.99)",
+      "--key": "rgba(239, 245, 255, 0.99)",
+      "--key-border": "rgba(191, 219, 254, 1)",
       "--key-text": "#0b1430",
 
-      "--key-saturation": 66,
-      "--key-lightness": 93,
-      "--key-border-saturation": 54,
-      "--key-border-lightness": 78,
-      "--key-active-saturation": 88,
-      "--key-active-lightness": 60,
-      "--key-hue-shift": 240,
+      "--key-saturation": 96,
+      "--key-lightness": 90,
+      "--key-border-saturation": 82,
+      "--key-border-lightness": 74,
+      "--key-active-saturation": 98,
+      "--key-active-lightness": 56,
+      "--key-hue-shift": 0,
+      "--key-hue-base": 200,
+      "--key-hue-range": 80,
 
       // Tone colors: cool ice-blue scale
-      "--tone-saturation": 94,
-      "--tone-lightness": 62,
+      "--tone-saturation": 98,
+      "--tone-lightness": 58,
 
       "--accent": "#bfdbfe", // soft ice blue
       "--accent-strong": "#60a5fa", // stronger winter blue
@@ -172,7 +174,7 @@ const THEMES = [
     values: {
       "--bg": "#0b0f24",
       "--body-bg-image":
-        'linear-gradient(rgba(5,8,22,0.38), rgba(5,8,22,0.6)), url("assets/santas_groove.png")',
+        'linear-gradient(rgba(5,8,22,0.2), rgba(5,8,22,0.32)), url("assets/santas_groove.png")',
 
       "--panel": "rgba(15, 23, 42, 0.64)",
       "--panel-strong": "rgba(15, 23, 42, 0.8)",
@@ -194,21 +196,23 @@ const THEMES = [
       "--control-hover-border": "#facc15",
 
       // Keys – warm off-white with subtle red/green edges
-      "--key": "rgba(255, 250, 240, 0.96)",
-      "--key-border": "rgba(252, 165, 165, 0.95)",
+      "--key": "rgba(255, 248, 240, 0.98)",
+      "--key-border": "rgba(252, 165, 165, 1)",
       "--key-text": "#111827",
 
-      "--key-saturation": 56,
-      "--key-lightness": 95,
-      "--key-border-saturation": 72,
-      "--key-border-lightness": 72,
-      "--key-active-saturation": 86,
-      "--key-active-lightness": 58,
+      "--key-saturation": 90,
+      "--key-lightness": 92,
+      "--key-border-saturation": 84,
+      "--key-border-lightness": 70,
+      "--key-active-saturation": 98,
+      "--key-active-lightness": 56,
       "--key-hue-shift": 0,
+      "--key-hue-base": 340,
+      "--key-hue-range": 130,
 
       // Tone colors – lively Christmas palette
-      "--tone-saturation": 88,
-      "--tone-lightness": 62,
+      "--tone-saturation": 98,
+      "--tone-lightness": 60,
 
       "--accent": "#facc15", // golden bell
       "--accent-strong": "#f97316", // warm orange glow
@@ -236,6 +240,18 @@ export function applyTheme(themeId) {
 
   Object.entries(theme.values).forEach(([cssVar, value]) => {
     root.style.setProperty(cssVar, value);
+  });
+
+  // Ensure hue-mapping vars always reset when a theme doesn't define them
+  const hueDefaults = {
+    "--key-hue-base": "0",
+    "--key-hue-range": "360",
+    "--key-hue-shift": "0",
+  };
+  Object.entries(hueDefaults).forEach(([cssVar, fallbackValue]) => {
+    if (!(cssVar in theme.values)) {
+      root.style.setProperty(cssVar, fallbackValue);
+    }
   });
 
   if (document.body) {

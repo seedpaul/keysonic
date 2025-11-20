@@ -16,6 +16,11 @@ export class AudioService {
     this.useNoise = false;
     this.filterStart = 1200;
     this.filterEnd = 180;
+    this.toneLevel = 0;
+    this.toneAttack = 0.004;
+    this.toneDecay = 0.08;
+    this.toneRelease = 0.08;
+    this.toneType = 'sine';
   }
 
   ensureUnlocked() {
@@ -42,6 +47,11 @@ export class AudioService {
         noise: true,
         filterStart: 1800,
         filterEnd: 220,
+        toneLevel: 0.45,
+        toneAttack: 0.004,
+        toneDecay: 0.08,
+        toneRelease: 0.08,
+        toneType: 'sine',
       },
       // legacy/classic synth stays pure sine so it's clearly different than "piano"
       sine: { type: 'sine', attack: 0.008, decay: 0.18, sustain: 0.55, release: 0.14, noise: false },
@@ -55,6 +65,11 @@ export class AudioService {
     this.useNoise = !!next.noise;
     this.filterStart = next.filterStart || 1200;
     this.filterEnd = next.filterEnd || 180;
+    this.toneLevel = next.toneLevel || 0;
+    this.toneAttack = next.toneAttack || 0.004;
+    this.toneDecay = next.toneDecay || 0.08;
+    this.toneRelease = next.toneRelease || 0.08;
+    this.toneType = next.toneType || 'sine';
   }
 
   /**
@@ -93,6 +108,24 @@ export class AudioService {
       noise.connect(filter).connect(gain).connect(this.ctx.destination);
       noise.start(now);
       noise.stop(now + length);
+
+      if (this.toneLevel > 0 && isFinite(freq)) {
+        const tone = this.ctx.createOscillator();
+        const toneGain = this.ctx.createGain();
+        tone.type = this.toneType || 'sine';
+        tone.frequency.setValueAtTime(freq, now);
+        const ta = this.toneAttack || 0.004;
+        const td = this.toneDecay || 0.08;
+        const tr = this.toneRelease || 0.08;
+        const level = Math.max(0.001, Math.min(1, this.toneLevel || 0.3));
+        toneGain.gain.setValueAtTime(0.0001, now);
+        toneGain.gain.linearRampToValueAtTime(level, now + ta);
+        toneGain.gain.exponentialRampToValueAtTime(level * 0.4, now + ta + td);
+        toneGain.gain.exponentialRampToValueAtTime(0.0001, now + ta + td + tr);
+        tone.connect(toneGain).connect(this.ctx.destination);
+        tone.start(now);
+        tone.stop(now + ta + td + tr + 0.05);
+      }
     } else {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();

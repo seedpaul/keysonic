@@ -76,6 +76,8 @@ const DEFAULT_KEY_COLOR_SETTINGS = {
   toneSaturation: 90,
   toneLightness: 55,
   hueShift: 0,
+  hueBase: 0,
+  hueRange: 360,
 };
 
 let keyColorSettings = { ...DEFAULT_KEY_COLOR_SETTINGS };
@@ -145,6 +147,14 @@ function refreshKeyColorSettings() {
     hueShift: parseCssNumber(
       styles.getPropertyValue("--key-hue-shift"),
       DEFAULT_KEY_COLOR_SETTINGS.hueShift
+    ),
+    hueBase: parseCssNumber(
+      styles.getPropertyValue("--key-hue-base"),
+      DEFAULT_KEY_COLOR_SETTINGS.hueBase
+    ),
+    hueRange: parseCssNumber(
+      styles.getPropertyValue("--key-hue-range"),
+      DEFAULT_KEY_COLOR_SETTINGS.hueRange
     ),
   };
 }
@@ -871,22 +881,30 @@ function getHueForCode(code) {
   return DISTINCT_HUES[idx];
 }
 
-// --- Hue shifting per theme (e.g., Winter Chill blue bias) ---
-function shiftedHue(hue) {
-  const { hueShift } = keyColorSettings;
+// --- Hue remapping per theme (e.g., Winter Chill blue-only gradient) ---
+function mapHue(hue) {
   if (isNaN(hue)) return hue;
-  return (hue + hueShift + 360) % 360;
+  const { hueShift, hueBase, hueRange } = keyColorSettings;
+  const shifted = (hue + hueShift + 360) % 360;
+  const base = ((hueBase || 0) % 360 + 360) % 360;
+  const rangeRaw = Number.isFinite(hueRange) ? hueRange : 360;
+  const range = Math.min(360, Math.max(1, rangeRaw || 360));
+  // If everything is at defaults, skip remapping to avoid altering other themes.
+  if (hueShift === 0 && base === 0 && Math.abs(range - 360) < 0.001) {
+    return hue;
+  }
+  return (base + (shifted / 360) * range) % 360;
 }
 
 function getBaseKeyColor(hue) {
   const { saturation, lightness } = keyColorSettings;
-  const h = shiftedHue(hue);
+  const h = mapHue(hue);
   return isNaN(h) ? "var(--key)" : `hsl(${h}, ${saturation}%, ${lightness}%)`;
 }
 
 function getBaseKeyBorder(hue) {
   const { borderSaturation, borderLightness } = keyColorSettings;
-  const h = shiftedHue(hue);
+  const h = mapHue(hue);
   return isNaN(h)
     ? "var(--key-border)"
     : `hsl(${h}, ${borderSaturation}%, ${borderLightness}%)`;
@@ -894,7 +912,7 @@ function getBaseKeyBorder(hue) {
 
 function getToneColor(hue) {
   const { toneSaturation, toneLightness } = keyColorSettings;
-  const h = shiftedHue(hue);
+  const h = mapHue(hue);
   return isNaN(h)
     ? `hsl(0, ${toneSaturation}%, ${toneLightness}%)`
     : `hsl(${h}, ${toneSaturation}%, ${toneLightness}%)`;
@@ -902,7 +920,7 @@ function getToneColor(hue) {
 
 function getActiveKeyColor(hue) {
   const { activeSaturation, activeLightness } = keyColorSettings;
-  const h = shiftedHue(hue);
+  const h = mapHue(hue);
   return isNaN(h)
     ? "var(--key)"
     : `hsl(${h}, ${activeSaturation}%, ${activeLightness}%)`;
@@ -945,7 +963,7 @@ function applyBaseKeyColors() {
 
 function setKeyboardShadowHue(hue) {
   if (!keyboardEls.length || isNaN(hue)) return;
-  const h = shiftedHue(hue);
+  const h = mapHue(hue);
   const shadow = `0 8px 32px hsla(${h}, 90%, 55%, 0.75)`;
   keyboardEls.forEach((el) => {
     el.style.boxShadow = shadow;

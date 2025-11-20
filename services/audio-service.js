@@ -8,6 +8,11 @@ const createContext = () => {
 export class AudioService {
   constructor() {
     this.ctx = createContext();
+    this.masterGain = this.ctx ? this.ctx.createGain() : null;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.value = 0.8;
+      this.masterGain.connect(this.ctx.destination);
+    }
     this.instrument = 'sine';
     this.attack = 0.012;
     this.decay = 0.24;
@@ -27,6 +32,14 @@ export class AudioService {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+
+  setVolume(value = 1) {
+    if (!this.masterGain) return;
+    const v = Math.max(0, Math.min(1.5, value));
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setTargetAtTime(v, now, 0.02);
   }
 
   setInstrument(preset) {
@@ -105,7 +118,8 @@ export class AudioService {
       gain.gain.exponentialRampToValueAtTime(Math.max(0.02, s), now + a + d);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + a + d + r);
 
-      noise.connect(filter).connect(gain).connect(this.ctx.destination);
+      const destination = this.masterGain || this.ctx.destination;
+      noise.connect(filter).connect(gain).connect(destination);
       noise.start(now);
       noise.stop(now + length);
 
@@ -122,7 +136,8 @@ export class AudioService {
         toneGain.gain.linearRampToValueAtTime(level, now + ta);
         toneGain.gain.exponentialRampToValueAtTime(level * 0.4, now + ta + td);
         toneGain.gain.exponentialRampToValueAtTime(0.0001, now + ta + td + tr);
-        tone.connect(toneGain).connect(this.ctx.destination);
+        const destinationTone = this.masterGain || this.ctx.destination;
+        tone.connect(toneGain).connect(destinationTone);
         tone.start(now);
         tone.stop(now + ta + td + tr + 0.05);
       }
@@ -138,7 +153,8 @@ export class AudioService {
       gain.gain.exponentialRampToValueAtTime(s, now + a + d);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + a + d + r);
 
-      osc.connect(gain).connect(this.ctx.destination);
+      const destination = this.masterGain || this.ctx.destination;
+      osc.connect(gain).connect(destination);
       osc.start(now);
       osc.stop(now + a + d + r + 0.05);
     }

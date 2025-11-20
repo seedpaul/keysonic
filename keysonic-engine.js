@@ -47,6 +47,8 @@ let typedBackspaceBtn;
 let nowPlayingChars = [];
 let tempoSlider;
 let tempoValueEl;
+let volumeSlider;
+let volumeValueEl;
 
 let numpadRobotEl = null;
 let numpadRobotEyes = [];
@@ -62,6 +64,7 @@ let rootFreq = 220; // keep your current baseline
 let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const INSTRUMENT_PREF_KEY = "keysonic-instrument-pref-v1";
+const VOLUME_PREF_KEY = "keysonic-volume-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 let themeSelect;
 let instrumentSelect;
@@ -199,6 +202,16 @@ function updateTempo(value) {
   }
 }
 
+function updateVolume(value) {
+  const next = !isNaN(value) && value >= 0 ? Math.min(value, 1.5) : 0.8;
+  if (audioService?.setVolume) {
+    audioService.setVolume(next);
+  }
+  if (volumeValueEl) {
+    volumeValueEl.textContent = `${Math.round(next * 100)}%`;
+  }
+}
+
 // ----- Public Init -----
 
 export function initKeysonic() {
@@ -280,6 +293,8 @@ export function initKeysonic() {
 
   tempoSlider = document.getElementById("tempo-slider");
   tempoValueEl = document.getElementById("tempo-value");
+  volumeSlider = document.getElementById("volume-slider");
+  volumeValueEl = document.getElementById("volume-value");
   typedBackspaceBtn = document.getElementById("typed-backspace-btn");
 
   if (tempoSlider) {
@@ -288,6 +303,22 @@ export function initKeysonic() {
     tempoSlider.addEventListener("input", () => {
       const val = parseFloat(tempoSlider.value);
       updateTempo(val);
+    });
+  }
+
+  if (volumeSlider) {
+    const savedVol = parseFloat(localStorage.getItem(VOLUME_PREF_KEY));
+    const initialVol = !isNaN(savedVol) ? savedVol : parseFloat(volumeSlider.value) || 0.8;
+    updateVolume(initialVol);
+    volumeSlider.value = initialVol;
+    volumeSlider.addEventListener("input", () => {
+      const val = parseFloat(volumeSlider.value);
+      updateVolume(val);
+      try {
+        localStorage.setItem(VOLUME_PREF_KEY, String(val));
+      } catch (err) {
+        // ignore storage failures
+      }
     });
   }
 

@@ -762,6 +762,80 @@ body.has-now-playing #now-playing-fieldset {
   }
 }
 
+/* ---------- Small screens / touch scaling ---------- */
+@media (max-width: 640px) {
+  body {
+    overflow-y: auto;
+  }
+
+  #word-music-title {
+    top: 8px;
+    transform: translateX(-50%) scale(1.15);
+    padding: 6px 14px 7px;
+  }
+
+  #word-display-container {
+    margin-top: 12vh;
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  .word-block {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #word-music {
+    padding: 0 8px;
+  }
+
+  .keyboard-wrapper {
+    grid-template-columns: 1fr;
+  }
+  .keyboard-wrapper #keyboard-numpad {
+    display: none;
+  }
+
+  .keyboard {
+    padding: 4px;
+  }
+
+  .keyboard-main-rows .row {
+    gap: 3px;
+  }
+
+  .key {
+    min-height: clamp(42px, 6vh, 60px);
+    font-size: 12px;
+  }
+
+  #wm-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  #wm-controls button,
+  .tempo-label,
+  .volume-label,
+  .scale-label,
+  .theme-label {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tempo-label input[type="range"],
+  .volume-label input[type="range"] {
+    width: 140px;
+  }
+
+  #wm-saved-grid {
+    width: 100vw;
+    padding: 6px 10px;
+  }
+}
+
 .tempo-label {
   display: inline-flex;
   align-items: center;
@@ -790,6 +864,43 @@ body.has-now-playing #now-playing-fieldset {
 #tempo-value {
   font-size: 11px;
   color: var(--muted-text);
+  display: inline-block;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.volume-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+
+  padding: 8px 12px;
+  min-height: 44px;
+
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+
+  border-radius: var(--radius-key);
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
+}
+
+.volume-label input[type="range"] {
+  width: 130px;
+  height: 22px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+#volume-value {
+  font-size: 11px;
+  color: var(--muted-text);
+  display: inline-block;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .scale-label,
 .instrument-label,

@@ -7,7 +7,7 @@ const THEMES = [
     values: {
       "--bg": "#f8fafc",
       "--body-bg-image":
-        'linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02)), url("assets/cartoon-style-musical-notes-background.jpg")',
+        'linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02)), url("assets/daylight_pop.png")',
       "--panel": "rgba(255, 255, 255, 0.96)",
       "--panel-strong": "#ffffff",
       "--panel-shadow": "0 1px 4px rgba(15, 23, 42, 0.12)",
@@ -46,7 +46,7 @@ const THEMES = [
     values: {
       "--bg": "#0a0f1f",
       "--body-bg-image":
-        'linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url("assets/midnight_neon_miami.png")',
+        'linear-gradient(rgba(6,11,26,0.55), rgba(6,11,26,0.68)), url("assets/midnight_neon.png")',
       "--panel": "rgba(3, 7, 18, 0.86)",
       "--panel-strong": "rgba(15, 23, 42, 0.88)",
       "--panel-shadow": "0 8px 22px rgba(2, 6, 23, 0.85)",
@@ -85,7 +85,7 @@ const THEMES = [
     values: {
       "--bg": "#0f172a",
       "--body-bg-image":
-        'linear-gradient(rgba(79,70,229,0.5), rgba(14,165,233,0.35)), url("assets/anime-style-clouds.jpg")',
+        'linear-gradient(rgba(79,70,229,0.5), rgba(14,165,233,0.35)), url("assets/sonic_sands.png")',
       "--panel": "rgba(15, 23, 42, 0.72)",
       "--panel-strong": "rgba(30, 41, 59, 0.85)",
       "--panel-shadow": "0 8px 20px rgba(15, 23, 42, 0.5)",
@@ -122,11 +122,11 @@ const THEMES = [
     id: "winter",
     label: "Winter Chill",
     values: {
-      "--bg": "#020617",
+      "--bg": "#0a1834",
       "--body-bg-image":
-        'linear-gradient(rgba(15,23,42,0.70), rgba(15,23,42,0.95)), url("assets/winter_chill.png")',
-      "--panel": "rgba(15, 23, 42, 0.78)",
-      "--panel-strong": "rgba(15, 23, 42, 0.92)",
+        'linear-gradient(rgba(15,23,42,0.38), rgba(15,23,42,0.58)), url("assets/winter_chill.png")',
+      "--panel": "rgba(15, 23, 42, 0.62)",
+      "--panel-strong": "rgba(15, 23, 42, 0.78)",
       "--panel-shadow": "0 10px 24px rgba(15, 23, 42, 0.75)",
       "--panel-shadow-strong": "0 14px 32px rgba(15, 23, 42, 0.9)",
       "--border": "rgba(191, 219, 254, 0.55)", // icy blue
@@ -141,26 +141,79 @@ const THEMES = [
       "--control-hover-bg": "rgba(30, 64, 175, 0.45)",
       "--control-hover-border": "#60a5fa",
 
-      // Keys = frosty white with subtle blue borders
-      "--key": "rgba(248, 250, 252, 0.96)",
-      "--key-border": "rgba(191, 219, 254, 0.95)",
-      "--key-text": "#0f172a",
+      // Keys = brighter frost with crisper blue edges
+      "--key": "rgba(248, 250, 252, 0.99)",
+      "--key-border": "rgba(191, 219, 254, 0.99)",
+      "--key-text": "#0b1430",
 
-      "--key-saturation": 42,
-      "--key-lightness": 92,
-      "--key-border-saturation": 34,
+      "--key-saturation": 66,
+      "--key-lightness": 93,
+      "--key-border-saturation": 54,
       "--key-border-lightness": 78,
-      "--key-active-saturation": 70,
+      "--key-active-saturation": 88,
       "--key-active-lightness": 60,
+      "--key-hue-shift": 240,
 
       // Tone colors: cool ice-blue scale
-      "--tone-saturation": 72,
-      "--tone-lightness": 68,
+      "--tone-saturation": 94,
+      "--tone-lightness": 62,
 
       "--accent": "#bfdbfe", // soft ice blue
       "--accent-strong": "#60a5fa", // stronger winter blue
 
       "--danger-bg": "rgba(248, 113, 113, 0.16)",
+      "--danger-border": "#fecaca",
+      "--danger-text": "#fee2e2",
+    },
+  },
+  {
+    id: "santa",
+    label: "Santa Groove",
+    values: {
+      "--bg": "#0b0f24",
+      "--body-bg-image":
+        'linear-gradient(rgba(5,8,22,0.38), rgba(5,8,22,0.6)), url("assets/santas_groove.png")',
+
+      "--panel": "rgba(15, 23, 42, 0.64)",
+      "--panel-strong": "rgba(15, 23, 42, 0.8)",
+      "--panel-shadow": "0 10px 24px rgba(15, 23, 42, 0.75)",
+      "--panel-shadow-strong": "0 14px 32px rgba(15, 23, 42, 0.9)",
+
+      // Borders – candy-cane / frosty mix
+      "--border": "rgba(252, 165, 165, 0.55)", // soft red
+      "--border-soft": "rgba(190, 242, 100, 0.45)", // soft green
+
+      "--text": "#f9fafb",
+      "--muted-text": "#e5e7eb",
+      "--muted-strong": "#fef9c3",
+
+      "--control-bg": "rgba(15, 23, 42, 0.88)",
+      "--control-border": "rgba(252, 165, 165, 0.7)",
+      "--control-text": "#f9fafb",
+      "--control-hover-bg": "rgba(239, 68, 68, 0.22)",
+      "--control-hover-border": "#facc15",
+
+      // Keys – warm off-white with subtle red/green edges
+      "--key": "rgba(255, 250, 240, 0.96)",
+      "--key-border": "rgba(252, 165, 165, 0.95)",
+      "--key-text": "#111827",
+
+      "--key-saturation": 56,
+      "--key-lightness": 95,
+      "--key-border-saturation": 72,
+      "--key-border-lightness": 72,
+      "--key-active-saturation": 86,
+      "--key-active-lightness": 58,
+      "--key-hue-shift": 0,
+
+      // Tone colors – lively Christmas palette
+      "--tone-saturation": 88,
+      "--tone-lightness": 62,
+
+      "--accent": "#facc15", // golden bell
+      "--accent-strong": "#f97316", // warm orange glow
+
+      "--danger-bg": "rgba(239, 68, 68, 0.16)",
       "--danger-border": "#fecaca",
       "--danger-text": "#fee2e2",
     },

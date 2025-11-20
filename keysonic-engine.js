@@ -75,6 +75,7 @@ const DEFAULT_KEY_COLOR_SETTINGS = {
   activeLightness: 48,
   toneSaturation: 90,
   toneLightness: 55,
+  hueShift: 0,
 };
 
 let keyColorSettings = { ...DEFAULT_KEY_COLOR_SETTINGS };
@@ -140,6 +141,10 @@ function refreshKeyColorSettings() {
     toneLightness: parseCssNumber(
       styles.getPropertyValue("--tone-lightness"),
       DEFAULT_KEY_COLOR_SETTINGS.toneLightness
+    ),
+    hueShift: parseCssNumber(
+      styles.getPropertyValue("--key-hue-shift"),
+      DEFAULT_KEY_COLOR_SETTINGS.hueShift
     ),
   };
 }
@@ -228,6 +233,12 @@ export function initKeysonic() {
       const appliedId = applyTheme(themeSelect.value);
       refreshKeyColorSettings();
       applyBaseKeyColors();
+      applyColorsToSavedTitles();
+      syncTypedDisplay();
+      const playbackSeq = getState().playback.sequence;
+      if (playbackSeq.length) {
+        nowPlayingView.tint(playbackSeq, getHueForCode, getToneColor);
+      }
       themeSelect.value = appliedId;
     });
   }
@@ -860,35 +871,41 @@ function getHueForCode(code) {
   return DISTINCT_HUES[idx];
 }
 
+// --- Hue shifting per theme (e.g., Winter Chill blue bias) ---
+function shiftedHue(hue) {
+  const { hueShift } = keyColorSettings;
+  if (isNaN(hue)) return hue;
+  return (hue + hueShift + 360) % 360;
+}
+
 function getBaseKeyColor(hue) {
   const { saturation, lightness } = keyColorSettings;
-  // lighter pastel but more saturated → better separation between hues
-  return isNaN(hue)
-    ? "var(--key)"
-    : `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  const h = shiftedHue(hue);
+  return isNaN(h) ? "var(--key)" : `hsl(${h}, ${saturation}%, ${lightness}%)`;
 }
 
 function getBaseKeyBorder(hue) {
   const { borderSaturation, borderLightness } = keyColorSettings;
-  // darker border for contrast against the base fill
-  return isNaN(hue)
+  const h = shiftedHue(hue);
+  return isNaN(h)
     ? "var(--key-border)"
-    : `hsl(${hue}, ${borderSaturation}%, ${borderLightness}%)`;
+    : `hsl(${h}, ${borderSaturation}%, ${borderLightness}%)`;
 }
 
 function getToneColor(hue) {
   const { toneSaturation, toneLightness } = keyColorSettings;
-  return isNaN(hue)
+  const h = shiftedHue(hue);
+  return isNaN(h)
     ? `hsl(0, ${toneSaturation}%, ${toneLightness}%)`
-    : `hsl(${hue}, ${toneSaturation}%, ${toneLightness}%)`;
+    : `hsl(${h}, ${toneSaturation}%, ${toneLightness}%)`;
 }
 
 function getActiveKeyColor(hue) {
   const { activeSaturation, activeLightness } = keyColorSettings;
-  // vivid active color so pressed keys really pop
-  return isNaN(hue)
+  const h = shiftedHue(hue);
+  return isNaN(h)
     ? "var(--key)"
-    : `hsl(${hue}, ${activeSaturation}%, ${activeLightness}%)`;
+    : `hsl(${h}, ${activeSaturation}%, ${activeLightness}%)`;
 }
 
 function getFrequencyForCode(code, degreeOffset = 0) {
@@ -928,7 +945,8 @@ function applyBaseKeyColors() {
 
 function setKeyboardShadowHue(hue) {
   if (!keyboardEls.length || isNaN(hue)) return;
-  const shadow = `0 8px 32px hsla(${hue}, 90%, 55%, 0.75)`;
+  const h = shiftedHue(hue);
+  const shadow = `0 8px 32px hsla(${h}, 90%, 55%, 0.75)`;
   keyboardEls.forEach((el) => {
     el.style.boxShadow = shadow;
   });

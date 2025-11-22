@@ -116,7 +116,7 @@ keysonic/
 
 **Paul Seed**  
 Creative developer, educator, mentor  
-Lead Mentor – FRC Team 4041 Gardiner Iron Tigers  
+Former Lead Mentor – FRC Team 4041 Gardiner Iron Tigers  
 Maine, USA
 
 ---

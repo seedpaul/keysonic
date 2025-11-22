@@ -21,6 +21,8 @@ export class AudioService {
     this.useNoise = false;
     this.filterStart = 1200;
     this.filterEnd = 180;
+    this.partials = [];
+    this.freqScale = 1;
     this.toneLevel = 0;
     this.toneAttack = 0.004;
     this.toneDecay = 0.08;
@@ -45,11 +47,67 @@ export class AudioService {
   setInstrument(preset) {
     // Simple oscillator presets
     const map = {
-      // softer attack and a pinch of triangle for a rounded, "felt" piano-ish tone
-      piano: { type: 'triangle', attack: 0.018, decay: 0.22, sustain: 0.32, release: 0.22, noise: false },
-      trumpet: { type: 'square', attack: 0.015, decay: 0.28, sustain: 0.55, release: 0.2, noise: false },
-      bass: { type: 'sawtooth', attack: 0.02, decay: 0.22, sustain: 0.65, release: 0.24, noise: false },
-      guitar: { type: 'triangle', attack: 0.012, decay: 0.26, sustain: 0.5, release: 0.2, noise: false },
+      // softer attack and a pinch of harmonics + a mellow lowpass sweep
+      piano: {
+        type: 'sine',
+        attack: 0.01,
+        decay: 0.22,
+        sustain: 0.3,
+        release: 0.26,
+        noise: false,
+        partials: [
+          { ratio: 2, level: 0.22, type: 'triangle' },
+          { ratio: 3, level: 0.12, type: 'triangle' },
+        ],
+        filterStart: 2400,
+        filterEnd: 900,
+        freqScale: 1,
+      },
+      trumpet: {
+        type: 'sawtooth',
+        attack: 0.012,
+        decay: 0.3,
+        sustain: 0.55,
+        release: 0.24,
+        noise: false,
+        partials: [
+          { ratio: 2, level: 0.3, type: 'square' },
+          { ratio: 3, level: 0.16, type: 'square' },
+        ],
+        filterStart: 2600,
+        filterEnd: 1400,
+        freqScale: 1,
+      },
+      bass: {
+        type: 'sawtooth',
+        attack: 0.016,
+        decay: 0.22,
+        sustain: 0.7,
+        release: 0.28,
+        noise: false,
+        partials: [
+          { ratio: 0.5, level: 0.35, type: 'sine' },
+          { ratio: 2, level: 0.18, type: 'triangle' },
+        ],
+        filterStart: 900,
+        filterEnd: 260,
+        freqScale: 0.8,
+      },
+      guitar: {
+        type: 'triangle',
+        attack: 0.01,
+        decay: 0.24,
+        sustain: 0.45,
+        release: 0.22,
+        noise: false,
+        partials: [
+          { ratio: 2, level: 0.25, type: 'triangle' },
+          { ratio: 3, level: 0.12, type: 'sine' },
+        ],
+        filterStart: 2100,
+        filterEnd: 1100,
+        freqScale: 1,
+      },
       // drum hit: white-noise burst through a falling low-pass for a thumpy splash
       drums: {
         type: 'triangle',
@@ -65,11 +123,14 @@ export class AudioService {
         toneDecay: 0.08,
         toneRelease: 0.08,
         toneType: 'sine',
+        partials: [],
+        freqScale: 1,
       },
       // legacy/classic synth stays pure sine so it's clearly different than "piano"
-      sine: { type: 'sine', attack: 0.008, decay: 0.18, sustain: 0.55, release: 0.14, noise: false },
+      sine: { type: 'sine', attack: 0.008, decay: 0.18, sustain: 0.55, release: 0.14, noise: false, partials: [], freqScale: 1 },
     };
-    const next = map[preset] || { type: 'sine', attack: 0.012, decay: 0.24, sustain: 0.5, release: 0.18, noise: false };
+    const next =
+      map[preset] || { type: 'sine', attack: 0.012, decay: 0.24, sustain: 0.5, release: 0.18, noise: false, partials: [], freqScale: 1 };
     this.instrument = next.type;
     this.attack = next.attack;
     this.decay = next.decay;
@@ -78,6 +139,8 @@ export class AudioService {
     this.useNoise = !!next.noise;
     this.filterStart = next.filterStart || 1200;
     this.filterEnd = next.filterEnd || 180;
+    this.partials = Array.isArray(next.partials) ? next.partials.slice() : [];
+    this.freqScale = Number.isFinite(next.freqScale) ? next.freqScale : 1;
     this.toneLevel = next.toneLevel || 0;
     this.toneAttack = next.toneAttack || 0.004;
     this.toneDecay = next.toneDecay || 0.08;
@@ -87,10 +150,13 @@ export class AudioService {
 
   /**
    * @param {number} freq
+   * @param {number} [velocity=1]
    */
-  playFrequency(freq) {
+  playFrequency(freq, velocity = 1) {
     if (!this.ctx || !freq || !isFinite(freq) || freq <= 0) return;
 
+    const vel = Math.min(1.5, Math.max(0.3, Number(velocity) || 1));
+    const effectiveFreq = freq * (Number.isFinite(this.freqScale) ? this.freqScale : 1);
     const now = this.ctx.currentTime;
     const a = this.attack || 0.01;
     const d = this.decay || 0.24;
@@ -114,8 +180,8 @@ export class AudioService {
 
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.9, now + a);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.02, s), now + a + d);
+      gain.gain.linearRampToValueAtTime(0.9 * vel, now + a);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.02, s * vel), now + a + d);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + a + d + r);
 
       const destination = this.masterGain || this.ctx.destination;
@@ -131,7 +197,7 @@ export class AudioService {
         const ta = this.toneAttack || 0.004;
         const td = this.toneDecay || 0.08;
         const tr = this.toneRelease || 0.08;
-        const level = Math.max(0.001, Math.min(1, this.toneLevel || 0.3));
+        const level = Math.max(0.001, Math.min(1, (this.toneLevel || 0.3) * vel));
         toneGain.gain.setValueAtTime(0.0001, now);
         toneGain.gain.linearRampToValueAtTime(level, now + ta);
         toneGain.gain.exponentialRampToValueAtTime(level * 0.4, now + ta + td);
@@ -142,21 +208,52 @@ export class AudioService {
         tone.stop(now + ta + td + tr + 0.05);
       }
     } else {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = this.instrument || 'sine';
-      osc.frequency.setValueAtTime(freq, now);
-
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.35, s), now + a);
-      gain.gain.exponentialRampToValueAtTime(s, now + a + d);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + a + d + r);
-
       const destination = this.masterGain || this.ctx.destination;
-      osc.connect(gain).connect(destination);
-      osc.start(now);
-      osc.stop(now + a + d + r + 0.05);
+      const useFilter = this.filterStart && this.filterEnd;
+      const filter = useFilter ? this.ctx.createBiquadFilter() : null;
+      let target = destination;
+      if (filter) {
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(this.filterStart, now);
+        filter.frequency.exponentialRampToValueAtTime(
+          Math.max(80, this.filterEnd),
+          now + a + d
+        );
+        target = filter;
+        filter.connect(destination);
+      }
+
+      const spawnVoice = (opts = {}) => {
+        const { wave = this.instrument || 'sine', mult = 1, level = 1 } = opts;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = wave;
+        osc.frequency.setValueAtTime(effectiveFreq * mult, now);
+
+        const peak = Math.max(0.25, s * vel * level);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(peak, now + a);
+        gain.gain.exponentialRampToValueAtTime(s * vel * level, now + a + d);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + a + d + r);
+
+        osc.connect(gain).connect(target);
+        osc.start(now);
+        osc.stop(now + a + d + r + 0.05);
+      };
+
+      // Fundamental
+      spawnVoice({ wave: this.instrument || 'sine', mult: 1, level: 1 });
+      // Harmonics
+      if (Array.isArray(this.partials)) {
+        this.partials.forEach((p) => {
+          const ratio = Number(p?.ratio) || 0;
+          const level = Number(p?.level) || 0;
+          if (ratio > 0 && level > 0.001) {
+            spawnVoice({ wave: p.type || this.instrument || 'sine', mult: ratio, level });
+          }
+        });
+      }
     }
   }
 }

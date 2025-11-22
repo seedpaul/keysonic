@@ -13,6 +13,7 @@
  * @property {boolean} isRecording
  * @property {boolean} isPlayingBack
  * @property {string[]} recordedSequence
+ * @property {{ code: string, offsetMs: number, velocity?: number }[]} recordedEvents
  * @property {string} typedText
  * @property {string[]} typedCodeSequence
  * @property {import('../types.js').RecordingEntry[]} savedRecordings
@@ -87,6 +88,7 @@ const defaultState = /** @type {KeysonicState} */ ({
   isRecording: false,
   isPlayingBack: false,
   recordedSequence: [],
+  recordedEvents: [],
   typedText: '',
   typedCodeSequence: [],
   savedRecordings: [],

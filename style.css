@@ -486,6 +486,83 @@ body.has-now-playing #now-playing-fieldset {
   color: var(--danger-text);
 }
 
+/* Action menu (hamburger) */
+#action-menu {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 90;
+}
+
+#action-menu-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 18px;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  cursor: pointer;
+  box-shadow: var(--panel-shadow);
+}
+
+#action-menu-list {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-key);
+  box-shadow: var(--panel-shadow-strong);
+  z-index: 95;
+  max-height: 70vh;
+  overflow: auto;
+  min-width: 180px;
+}
+
+#action-menu-list button {
+  min-width: 160px;
+  padding: 10px 12px;
+  font-size: 14px;
+  text-align: left;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-strong);
+  cursor: pointer;
+}
+
+#action-menu-list[hidden] {
+  display: none;
+}
+
+.menu-theme-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.menu-theme-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.menu-theme-row select {
+  font-size: 14px;
+  line-height: 1;
+  padding: 8px 10px;
+  min-height: 36px;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-strong);
+  color: var(--text);
+  cursor: pointer;
+}
+
 /* ---------- Saved Recordings Grid ---------- */
 
 #wm-saved-grid {
@@ -500,6 +577,10 @@ body.has-now-playing #now-playing-fieldset {
 
   height: 110px; /* reserved band: no layout jump */
   overflow-y: auto;
+}
+
+#saved-select-all {
+  display: none;
 }
 
 /* Compact, pill-like recording cards */
@@ -521,6 +602,7 @@ body.has-now-playing #now-playing-fieldset {
   border: 1px solid var(--border);
   background: var(--panel-strong);
   box-shadow: var(--panel-shadow);
+  color: var(--text);
 
   box-sizing: border-box;
   cursor: pointer;
@@ -637,7 +719,113 @@ body.has-now-playing #now-playing-fieldset {
   align-items: center;
   gap: 4px;
   margin-top: auto;
-  align-self: flex-end;
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.saved-card-select {
+  margin-right: 6px;
+  transform: translateY(1px);
+}
+
+.saved-card-actions button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 80;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--panel);
+  border-radius: var(--radius-key);
+  box-shadow: var(--panel-shadow-strong);
+  padding: 16px;
+  width: min(92vw, 420px);
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal-header button {
+  border: none;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+#export-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-select-all {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.export-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-key);
+  background: var(--panel-strong);
+}
+
+.export-item label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-item small {
+  color: var(--muted-text);
+}
+
+.modal-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.modal-actions button {
+  padding: 10px 14px;
+  min-width: 120px;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
+  cursor: pointer;
+  font-weight: 600;
 }
 
 .saved-card-loop-toggle {

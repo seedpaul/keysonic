@@ -63,12 +63,32 @@ export class RecordingRepository {
    * @param {string} params.name
    * @param {string[]} params.playSequence
    * @param {string[]} [params.displaySequence]
+   * @param {{ code: string, offsetMs: number, velocity?: number }[]} [params.timedEvents]
    * @returns {import('../types.js').RecordingEntry}
    */
-  createRecording({ name, playSequence, displaySequence }) {
+  createRecording({ name, playSequence, displaySequence, timedEvents, settings }) {
     const sequence = Array.isArray(displaySequence)
       ? displaySequence.slice()
       : this.toDisplaySequence(playSequence);
+
+    const normalizedTimed =
+      Array.isArray(timedEvents) && timedEvents.length
+        ? timedEvents.map((t) => ({
+            code: String(t.code || ''),
+            offsetMs: Math.max(0, Number(t.offsetMs) || 0),
+            ...(Number.isFinite(t.velocity) ? { velocity: Number(t.velocity) } : {}),
+          }))
+        : undefined;
+
+    const normalizedSettings =
+      settings && typeof settings === 'object'
+        ? {
+            ...(Number.isFinite(settings.tempo) ? { tempo: Number(settings.tempo) } : {}),
+            ...(settings.scaleId ? { scaleId: settings.scaleId } : {}),
+            ...(settings.instrument ? { instrument: settings.instrument } : {}),
+            ...(Number.isFinite(settings.rootFreq) ? { rootFreq: Number(settings.rootFreq) } : {}),
+          }
+        : undefined;
 
     return {
       id: this.#makeId(),
@@ -78,6 +98,8 @@ export class RecordingRepository {
       loop: false,
       reverse: false,
       compose: false,
+      ...(normalizedTimed ? { timedEvents: normalizedTimed } : {}),
+      ...(normalizedSettings ? { settings: normalizedSettings } : {}),
     };
   }
 
@@ -113,6 +135,24 @@ export class RecordingRepository {
     const sequence = Array.isArray(raw.sequence) && raw.sequence.length
       ? raw.sequence.slice()
       : this.toDisplaySequence(playSequence);
+    const timedEvents = Array.isArray(raw.timedEvents)
+      ? raw.timedEvents
+          .filter((t) => t && typeof t.code === 'string')
+          .map((t) => ({
+            code: t.code,
+            offsetMs: Math.max(0, Number(t.offsetMs) || 0),
+            ...(Number.isFinite(t.velocity) ? { velocity: Number(t.velocity) } : {}),
+          }))
+      : undefined;
+    const settings =
+      raw.settings && typeof raw.settings === 'object'
+        ? {
+            ...(Number.isFinite(raw.settings.tempo) ? { tempo: Number(raw.settings.tempo) } : {}),
+            ...(raw.settings.scaleId ? { scaleId: raw.settings.scaleId } : {}),
+            ...(raw.settings.instrument ? { instrument: raw.settings.instrument } : {}),
+            ...(Number.isFinite(raw.settings.rootFreq) ? { rootFreq: Number(raw.settings.rootFreq) } : {}),
+          }
+        : undefined;
     return {
       id: raw.id || this.#makeId(),
       name: raw.name || 'Recording',
@@ -121,6 +161,8 @@ export class RecordingRepository {
       loop: !!raw.loop,
       reverse: !!raw.reverse,
       compose: !!raw.compose,
+      ...(timedEvents?.length ? { timedEvents } : {}),
+      ...(settings ? { settings } : {}),
     };
   }
 

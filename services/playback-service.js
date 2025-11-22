@@ -7,6 +7,7 @@ export class PlaybackService {
   constructor() {
     this.timeoutId = null;
     this.listeners = new Map();
+    this.prevOffsetMs = 0;
   }
 
   /**
@@ -21,20 +22,22 @@ export class PlaybackService {
     return () => this.listeners.get(type)?.delete(handler);
   }
 
-  play({ sequence, label, id, reversed = false }) {
+  play({ sequence, label, id, reversed = false, settings = null }) {
     if (!sequence?.length) return;
 
     this.stop();
+    this.prevOffsetMs = 0;
 
     store.mutate((state) => {
       state.isPlayingBack = true;
       state.isRecording = false;
       state.playback = {
         id: id || null,
-        sequence: sequence.slice(),
+        sequence: Array.isArray(sequence) ? sequence.slice() : [],
         index: reversed ? sequence.length - 1 : 0,
         reversed,
         label: label || '',
+        settings: settings || null,
       };
     });
 
@@ -47,6 +50,7 @@ export class PlaybackService {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
+    this.prevOffsetMs = 0;
 
     const wasPlaying = store.getState().isPlayingBack;
     store.mutate((state) => {
@@ -81,6 +85,7 @@ export class PlaybackService {
         this.timeoutId = setTimeout(() => this.stop(), 200 / (tempo || 1));
         return;
       }
+      this.prevOffsetMs = 0;
       store.mutate((draft) => {
         draft.playback.index = draft.playback.reversed
           ? draft.playback.sequence.length - 1
@@ -90,21 +95,63 @@ export class PlaybackService {
       return;
     }
 
-    const code = sequence[index];
-    this.#emit('step', {
-      code,
-      index,
-      playbackId: playback.id,
-      sequence,
-    });
+    const item = sequence[index];
+    const tempoVal = tempo || 1;
+    const currentOffset = this.#getOffsetMs(item);
+    const lastOffset = this.prevOffsetMs || 0;
+    const delayBefore =
+      currentOffset != null && !playback.reversed
+        ? Math.max(0, currentOffset - lastOffset) / tempoVal
+        : 0;
 
-    store.mutate((draft) => {
-      const step = draft.playback.reversed ? -1 : 1;
-      draft.playback.index += step;
-    });
+    const runStep = () => {
+      const payload =
+        item && typeof item === 'object'
+          ? { code: item.code, velocity: item.velocity, settings: item.settings }
+          : { code: item, settings: playback.settings };
+      const code = payload.code;
+      this.#emit('step', {
+        code,
+        velocity: payload.velocity,
+        settings: payload.settings || playback.settings || null,
+        index,
+        playbackId: playback.id,
+        sequence,
+      });
 
-    const ms = STEP_BASE_MS / (tempo || 1);
-    this.timeoutId = setTimeout(() => this.#queueNext(), ms);
+      this.prevOffsetMs = currentOffset != null ? currentOffset : lastOffset;
+
+      store.mutate((draft) => {
+        const step = draft.playback.reversed ? -1 : 1;
+        draft.playback.index += step;
+      });
+
+      let delayMs = STEP_BASE_MS / tempoVal;
+
+      const nextIdx = playback.reversed ? index - 1 : index + 1;
+      const nextEvent = sequence[nextIdx];
+      const nextOffset = this.#getOffsetMs(nextEvent);
+
+      if (currentOffset != null && nextOffset != null) {
+        const delta = Math.abs(nextOffset - currentOffset);
+        delayMs = Math.max(0, delta) / tempoVal;
+      }
+
+      this.timeoutId = setTimeout(() => this.#queueNext(), delayMs);
+    };
+
+    if (delayBefore > 0) {
+      this.timeoutId = setTimeout(runStep, delayBefore);
+    } else {
+      runStep();
+    }
+  }
+
+  #getOffsetMs(item) {
+    if (item && typeof item === 'object' && typeof item.offsetMs === 'number') {
+      return Math.max(0, item.offsetMs);
+    }
+    return null;
   }
 
   #shouldLoop(id) {

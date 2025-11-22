@@ -8,12 +8,25 @@ export function getDomRefs() {
   const typedTextEl = document.getElementById('typed-text');
   const nowPlayingEl = document.getElementById('now-playing');
   const savedGridEl = document.getElementById('wm-saved-grid');
+  const actionMenuToggle = document.getElementById('action-menu-toggle');
+  const actionMenuList = document.getElementById('action-menu-list');
+  const menuImportBtn = document.getElementById('menu-import');
+  const menuExportBtn = document.getElementById('menu-export');
+  const menuThemeBtn = document.getElementById('menu-theme');
+  const exportModal = document.getElementById('export-modal');
+  const exportList = document.getElementById('export-list');
+  const exportModalClose = document.getElementById('export-modal-close');
+  const exportModalExport = document.getElementById('export-modal-export');
+  const exportSelectAllToggle = document.getElementById('export-select-all-toggle');
 
   const recordBtn = wmControls?.querySelector('button[data-action="record"]') || null;
   const stopBtn = wmControls?.querySelector('button[data-action="stop"]') || null;
   const clearBtn = wmControls?.querySelector('button[data-action="clear"]') || null;
 
   const saveTypedBtn = document.getElementById('save-typed-btn');
+  const exportBtn = document.getElementById('export-btn');
+  const importBtn = document.getElementById('import-btn');
+  const importFileInput = document.getElementById('import-file-input');
 
   return {
     titleEl,
@@ -27,6 +40,17 @@ export function getDomRefs() {
     stopBtn,
     clearBtn,
     saveTypedBtn,
+    importFileInput,
+    actionMenuToggle,
+    actionMenuList,
+    menuImportBtn,
+    menuExportBtn,
+    menuThemeBtn,
+    exportModal,
+    exportList,
+    exportModalClose,
+    exportModalExport,
+    exportSelectAllToggle,
   };
 }
 
@@ -222,11 +246,16 @@ export class SavedGridView {
       meta.className = 'saved-card-meta';
       const noteCount = Array.isArray(entry.sequence) ? entry.sequence.length : 0;
       meta.textContent = `${noteCount} note${noteCount === 1 ? '' : 's'}`;
-      const playIndicator = document.createElement('div');
+                  const playIndicator = document.createElement('div');
       playIndicator.className = 'saved-card-play-indicator';
       const actions = document.createElement('div');
       actions.className = 'saved-card-actions';
-      const loopBtn = this.#buildButton('saved-card-loop-toggle', 'Loop this song', '⟳');
+      const selectInput = document.createElement('input');
+      selectInput.type = 'checkbox';
+      selectInput.className = 'saved-card-select';
+      selectInput.title = 'Select for export';
+      selectInput.setAttribute('aria-label', 'Select for export');
+      const loopBtn = this.#buildButton('saved-card-loop-toggle', 'Loop this song', '↻');
       loopBtn.style.fontSize = '0.9em';
       const reverseBtn = this.#buildButton(
         'saved-card-reverse-toggle',
@@ -235,10 +264,10 @@ export class SavedGridView {
       );
       reverseBtn.style.fontSize = '0.9em';
       const composeBtn = this.#buildButton('saved-card-compose-toggle', 'Funkified', '🔥');
-      composeBtn.style.fontSize = '0.8em';
+      composeBtn.style.fontSize = '0.9em';
       composeBtn.setAttribute('aria-pressed', entry.compose ? 'true' : 'false');
-      const delBtn = this.#buildButton('saved-card-delete', 'Delete this song', '⏏');
-      delBtn.style.fontSize = '1.2em';
+      const delBtn = this.#buildButton('saved-card-delete', 'Delete this song', '🗑️');
+      delBtn.style.fontSize = '0.75em';
       actions.append(loopBtn, reverseBtn, composeBtn, delBtn);
       card.append(title, meta, playIndicator, actions);
       this.container.appendChild(card);

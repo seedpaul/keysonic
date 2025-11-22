@@ -39,16 +39,28 @@ let recordBtn;
 let stopBtn;
 let clearBtn;
 let saveTypedBtn;
+let importFileInput;
 let typedTextEl;
 let nowPlayingEl;
 let savedGridEl;
 let typedBackspaceBtn;
+let actionMenuToggle;
+let actionMenuList;
+let exportModal;
+let exportList;
+let exportModalClose;
+let exportModalExport;
+let menuImportBtn;
+let menuExportBtn;
+let menuThemeBtn;
+let exportSelectAllToggle;
 
 let nowPlayingChars = [];
 let tempoSlider;
 let tempoValueEl;
 let volumeSlider;
 let volumeValueEl;
+let lastKeydownTime = null;
 
 let numpadRobotEl = null;
 let numpadRobotEyes = [];
@@ -102,6 +114,28 @@ function applyInstrument(id) {
   } catch (err) {
     // ignore storage issues
   }
+}
+
+function getCurrentInstrumentId() {
+  if (instrumentSelect && instrumentSelect.value) {
+    return instrumentSelect.value;
+  }
+  try {
+    const saved = localStorage.getItem(INSTRUMENT_PREF_KEY);
+    if (saved) return saved;
+  } catch (err) {
+    // ignore storage issues
+  }
+  return "piano";
+}
+
+function getCurrentSettingsSnapshot() {
+  return {
+    tempo: getState().tempo || 1,
+    scaleId: currentScaleId,
+    instrument: getCurrentInstrumentId(),
+    rootFreq,
+  };
 }
 
 function parseCssNumber(value, fallback) {
@@ -200,6 +234,9 @@ function updateTempo(value) {
   if (tempoValueEl) {
     tempoValueEl.textContent = next.toFixed(1) + "x";
   }
+  if (tempoSlider && parseFloat(tempoSlider.value) !== next) {
+    tempoSlider.value = String(next);
+  }
 }
 
 function updateVolume(value) {
@@ -210,6 +247,45 @@ function updateVolume(value) {
   if (volumeValueEl) {
     volumeValueEl.textContent = `${Math.round(next * 100)}%`;
   }
+}
+
+function applyScale(nextScaleId) {
+  const target = SCALES[nextScaleId] ? nextScaleId : currentScaleId;
+  if (!SCALES[target]) return currentScaleId;
+
+  currentScaleId = target;
+  try {
+    localStorage.setItem(SCALE_PREF_KEY, target);
+  } catch (err) {
+    // ignore storage issues
+  }
+
+  if (scaleSelect) {
+    scaleSelect.value = currentScaleId;
+  }
+
+  if (keyElements) {
+    Object.entries(keyElements).forEach(([code, els]) => {
+      const hue = getHueForCode(code);
+      if (isNaN(hue)) return;
+
+      els.forEach((el) => {
+        el.dataset.hue = String(hue);
+      });
+    });
+
+    applyBaseKeyColors();
+  }
+
+  applyColorsToSavedTitles();
+  syncTypedDisplay();
+
+  const playbackSeq = getState().playback.sequence;
+  if (playbackSeq.length) {
+    nowPlayingView.tint(playbackSeq, getHueForCode, getToneColor);
+  }
+
+  return currentScaleId;
 }
 
 // ----- Public Init -----
@@ -226,6 +302,17 @@ export function initKeysonic() {
     stopBtn,
     clearBtn,
     saveTypedBtn,
+    importFileInput,
+    actionMenuToggle,
+    actionMenuList,
+    menuImportBtn,
+    menuExportBtn,
+    menuThemeBtn,
+    exportModal,
+    exportList,
+    exportModalClose,
+    exportModalExport,
+    exportSelectAllToggle,
   } = dom);
 
   document.title = "Keysonic";
@@ -375,50 +462,18 @@ export function initKeysonic() {
       currentScaleId = "major";
     }
     scaleSelect.value = currentScaleId;
+    applyScale(currentScaleId);
 
     // react to user changes
     scaleSelect.addEventListener("change", () => {
-      const next = scaleSelect.value;
-      if (!SCALES[next]) return;
-
-      currentScaleId = next;
-      localStorage.setItem(SCALE_PREF_KEY, next);
-
-      // 1) Recompute hues for every physical key so that
-      //    keys that play the same note stay visually grouped
-      if (keyElements) {
-        Object.entries(keyElements).forEach(([code, els]) => {
-          const hue = getHueForCode(code);
-          if (isNaN(hue)) return;
-
-          els.forEach((el) => {
-            el.dataset.hue = String(hue);
-          });
-        });
-
-        // Re-apply base colors with the new hues
-        applyBaseKeyColors();
-      }
-
-      // 2) Refresh colors on saved song titles (they use getHueForCode too)
-      applyColorsToSavedTitles();
-
-      // 3) Refresh colors on the "Spell a Song" typed text
-      syncTypedDisplay();
-
-      const playbackSeq = getState().playback.sequence;
-      if (playbackSeq.length) {
-        nowPlayingView.tint(playbackSeq, getHueForCode, getToneColor);
-      }
-
-      // optional: if a song is currently playing, you could restart it here under the new scale
-      // if (isPlayingBack) { stopPlayback(); /* optionally re-play last sequence */ }
+      applyScale(scaleSelect.value);
     });
   }
 
   loadSavedRecordings();
   savedGridView.render(store.getState().savedRecordings);
   applyColorsToSavedTitles();
+  updateSelectAllToggle();
 
   resetTypedText();
   nowPlayingChars = nowPlayingView.setLabel("");
@@ -447,6 +502,60 @@ function wireControlEvents() {
   if (saveTypedBtn) {
     saveTypedBtn.addEventListener("click", handleSaveTypedClick);
   }
+  if (importFileInput) {
+    importFileInput.addEventListener("change", handleImportFileChange);
+  }
+  if (actionMenuToggle) {
+    actionMenuToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleActionMenu();
+    });
+  }
+  if (menuImportBtn) {
+    menuImportBtn.addEventListener("click", () => {
+      toggleActionMenu(true);
+      handleImportClick();
+    });
+  }
+  if (menuExportBtn) {
+    menuExportBtn.addEventListener("click", () => {
+      toggleActionMenu(true);
+      openExportModal();
+    });
+  }
+  if (menuThemeBtn) {
+    menuThemeBtn.addEventListener("click", () => {
+      toggleActionMenu(true);
+      if (themeSelect) {
+        themeSelect.focus();
+        themeSelect.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }
+  if (exportModalClose) {
+    exportModalClose.addEventListener("click", closeExportModal);
+  }
+  if (exportModal) {
+    exportModal.addEventListener("click", (e) => {
+      if (e.target === exportModal) closeExportModal();
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (actionMenuList && !actionMenuList.hidden) {
+      const isInside =
+        actionMenuList.contains(e.target) || actionMenuToggle?.contains(e.target);
+      if (!isInside) toggleActionMenu(true);
+    }
+  });
+  if (exportModalExport) {
+    exportModalExport.addEventListener("click", () => {
+      exportSongs(getSelectedExportIds());
+      closeExportModal();
+    });
+  }
+  if (exportSelectAllToggle) {
+    exportSelectAllToggle.addEventListener("change", handleSelectAllToggle);
+  }
   if (savedGridEl) {
     savedGridEl.addEventListener("click", handleSavedGridClick);
   }
@@ -462,7 +571,14 @@ function handlePlaybackStarted(snapshot) {
   const label = snapshot?.label || "";
   nowPlayingChars = nowPlayingView.setLabel(label);
   if (snapshot?.sequence?.length) {
-    nowPlayingView.tint(snapshot.sequence, getHueForCode, getToneColor);
+    const seqForTint = snapshot.sequence.map((s) =>
+      typeof s === "object" ? s.code : s
+    );
+    nowPlayingView.tint(seqForTint, getHueForCode, getToneColor);
+  }
+  if (snapshot?.settings) {
+    applyPlaybackSettings(snapshot.settings);
+    retintNowPlaying();
   }
   applyPlaybackCardHighlight();
   updateControls();
@@ -474,9 +590,42 @@ function handlePlaybackStopped() {
   updateControls();
 }
 
-function handlePlaybackStep({ code, index, sequence }) {
-  triggerKey(code, { fromPlayback: true });
+function handlePlaybackStep({ code, index, sequence, velocity }) {
+  triggerKey(code, { fromPlayback: true, velocity });
   highlightPlaybackProgress(index, sequence);
+}
+
+function applyPlaybackSettings(source) {
+  const settings = source && source.settings ? source.settings : source;
+  if (!settings || typeof settings !== "object") return;
+
+  if (typeof settings.tempo === "number" && !Number.isNaN(settings.tempo)) {
+    updateTempo(settings.tempo);
+  }
+
+  if (typeof settings.scaleId === "string" && SCALES[settings.scaleId]) {
+    applyScale(settings.scaleId);
+  }
+
+  if (typeof settings.instrument === "string" && settings.instrument) {
+    applyInstrument(settings.instrument);
+    if (instrumentSelect) {
+      instrumentSelect.value = settings.instrument;
+    }
+  }
+
+  if (Number.isFinite(settings.rootFreq)) {
+    rootFreq = Number(settings.rootFreq);
+  }
+
+  retintNowPlaying();
+}
+
+function retintNowPlaying() {
+  const playbackSeq = getState().playback.sequence || [];
+  if (!playbackSeq.length) return;
+  const seqForTint = playbackSeq.map((s) => (typeof s === "object" ? s.code : s));
+  nowPlayingView.tint(seqForTint, getHueForCode, getToneColor);
 }
 
 function highlightPlaybackProgress(currentIndex, sequence) {
@@ -503,6 +652,18 @@ function handleKeydown(e) {
   const mapped = normalizeEventToCode(e);
   if (!mapped || !keyOrder.includes(mapped)) return;
 
+  const now =
+    typeof performance !== "undefined" && performance.now
+      ? performance.now()
+      : Date.now();
+  let velocity = 0.7;
+  if (lastKeydownTime !== null) {
+    const dt = Math.min(400, Math.max(40, now - lastKeydownTime));
+    const t = (400 - dt) / (400 - 40); // 0..1
+    velocity = 0.3 + t * (1.0 - 0.3);
+  }
+  lastKeydownTime = now;
+
   if (
     mapped === "Tab" ||
     mapped === "Backspace" ||
@@ -513,7 +674,7 @@ function handleKeydown(e) {
     e.preventDefault();
   }
 
-  triggerKey(mapped);
+  triggerKey(mapped, { velocity, eventTime: now });
 }
 
 function handleRecordClick() {
@@ -553,9 +714,38 @@ function handleClearClick() {
   updateControls();
 }
 
+function handleExportClick() {
+  openExportModal();
+}
+
+function handleImportClick() {
+  if (importFileInput) {
+    importFileInput.click();
+  }
+}
+
+function handleImportFileChange(e) {
+  const input = e?.target || importFileInput;
+  if (!input || !input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(String(reader.result || "{}"));
+      importSongPack(data);
+    } catch (err) {
+      console.error("Failed to import songs", err);
+    }
+    input.value = "";
+  };
+  reader.readAsText(file);
+}
+
 function handleSaveTypedClick() {
   const state = getState();
   const playSeq = state.typedCodeSequence.slice();
+  const timed = state.recordedEvents.slice();
   if (!playSeq.length) return;
 
   const displaySeq = recordingRepo.toDisplaySequence(playSeq);
@@ -571,6 +761,8 @@ function handleSaveTypedClick() {
     name,
     playSequence: playSeq,
     displaySequence: displaySeq,
+    timedEvents: timed,
+    settings: getCurrentSettingsSnapshot(),
   });
 
   setSavedRecordings([...recordings, entry]);
@@ -581,6 +773,16 @@ function handleSaveTypedClick() {
 }
 
 function handleSavedGridClick(e) {
+  const selectToggle = e.target.closest(".saved-card-select");
+  if (selectToggle) {
+    e.stopPropagation();
+    const card = selectToggle.closest(".saved-card");
+    if (card) {
+      card.classList.toggle("selected", selectToggle.checked);
+    }
+    return;
+  }
+
   const loopBtn = e.target.closest(".saved-card-loop-toggle");
   if (loopBtn) {
     const card = loopBtn.closest(".saved-card");
@@ -688,17 +890,31 @@ function handleTypedBackspaceClick() {
 }
 
 function buildPlaybackSequence(entry) {
-  let seq = entry.playSequence.slice();
-  if (entry.compose && seq.length) {
+  // If funkify/compose is enabled, honor that first (timed events are ignored in this mode).
+  if (entry.compose) {
+    const seq = entry.playSequence.slice();
+    if (!seq.length) return seq;
     const song = composeFromText(seq, {
       meter: "4/4",
       restBetweenWords: 3,
       wordContour: "arch",
       maxSpan: 4,
     });
-    seq = flattenEventsToStepCodes(song);
+    return flattenEventsToStepCodes(song);
   }
-  return seq;
+
+  // Otherwise, prefer high-fidelity timed playback when available.
+  if (Array.isArray(entry.timedEvents) && entry.timedEvents.length) {
+    return entry.timedEvents.map((ev) => ({
+      code: ev.code,
+      offsetMs: Math.max(0, Number(ev.offsetMs) || 0),
+      ...(Number.isFinite(ev.velocity) ? { velocity: Number(ev.velocity) } : {}),
+      ...(entry.settings ? { settings: entry.settings } : {}),
+    }));
+  }
+
+  // Fallback: original fixed-step sequence.
+  return entry.playSequence.slice();
 }
 
 function startPlaybackFromEntry(entry, { preserveTyped = false } = {}) {
@@ -712,6 +928,7 @@ function startPlaybackFromEntry(entry, { preserveTyped = false } = {}) {
     label: entry.name,
     id: entry.id,
     reversed: !!entry.reverse,
+    settings: entry.settings || getCurrentSettingsSnapshot(),
   });
 }
 
@@ -756,6 +973,7 @@ function updateControls() {
 
 function autoSaveCurrentRecording() {
   const playSeq = getState().recordedSequence.slice();
+  const timed = getState().recordedEvents.slice();
   if (!playSeq.length) return;
 
   const displaySeq = recordingRepo.toDisplaySequence(playSeq);
@@ -768,6 +986,8 @@ function autoSaveCurrentRecording() {
     name,
     playSequence: playSeq,
     displaySequence: displaySeq,
+    timedEvents: timed,
+    settings: getCurrentSettingsSnapshot(),
   });
 
   setSavedRecordings([...recordings, entry]);
@@ -814,8 +1034,8 @@ function resetTypedText() {
   updateControls();
 }
 
-function updateTypedTextForUserKey(code) {
-  recordingService.appendTyped(code);
+function updateTypedTextForUserKey(code, meta = {}) {
+  recordingService.appendTyped(code, meta);
   syncTypedDisplay();
   updateControls();
 }
@@ -1009,13 +1229,13 @@ function resetKeyboardShadow() {
 }
 
 function playTone(code, opts = {}) {
-  const { degreeOffset = 0 } = opts;
+  const { degreeOffset = 0, velocity = null } = opts;
   const freq = getFrequencyForCode(code, degreeOffset);
   if (!freq || !audioService) return;
-  audioService.playFrequency(freq);
+  audioService.playFrequency(freq, velocity);
 }
 
-function flashKey(code, { isEcho = false } = {}) {
+function flashKey(code, { isEcho = false, velocity = null } = {}) {
   const els = keyElements[code];
   if (!els || !els.length) return;
 
@@ -1026,9 +1246,15 @@ function flashKey(code, { isEcho = false } = {}) {
     setKeyboardShadowHue(hue);
   }
 
+  const vel = Number.isFinite(velocity) ? velocity : 1;
+  const scaleAmt = 1 + Math.min(0.2, Math.max(0, (vel - 0.3) * 0.25));
+  const brightAmt = 1 + Math.min(0.25, Math.max(0, (vel - 0.3) * 0.35));
+
   els.forEach((el) => {
     el.classList.add("active");
     el.style.backgroundColor = activeBg;
+    el.style.transform = `scale(${scaleAmt})`;
+    el.style.filter = `brightness(${brightAmt})`;
   });
 
   // Use the existing particle system, but let it know if this is an echo hit
@@ -1040,37 +1266,52 @@ function flashKey(code, { isEcho = false } = {}) {
       const h = parseFloat(el.dataset.hue);
       el.style.backgroundColor = getBaseKeyColor(h);
       el.style.borderColor = getBaseKeyBorder(h);
+      el.style.transform = "";
+      el.style.filter = "";
     });
     resetKeyboardShadow();
   }, 140);
 }
 
-function triggerKey(rawCode, { fromPlayback = false } = {}) {
-  // REST tokens from the composer: advance time but do nothing visually
-  if (rawCode === "__REST__") {
-    return;
+function parseCodeToken(rawCode) {
+  const out = {
+    code: rawCode && typeof rawCode === "object" ? rawCode.code : rawCode,
+    isEcho: false,
+    degreeOffset: 0,
+  };
+
+  if (rawCode === "__REST__") return out;
+  if (rawCode && typeof rawCode === "object") {
+    if (Number.isFinite(rawCode.degreeOffset)) out.degreeOffset = rawCode.degreeOffset;
+    if (rawCode.echo) out.isEcho = true;
   }
+  if (typeof out.code !== "string") return out;
 
-  let code = rawCode;
-  let isEcho = false;
-  let degreeOffset = 0;
-
-  // Parse composer-encoded tokens, e.g. "ECHO:B-2:KeyA"
-  if (typeof rawCode === "string" && rawCode.includes(":")) {
-    const parts = rawCode.split(":");
-    const base = parts[parts.length - 1];
+  if (out.code.includes(":")) {
+    const parts = out.code.split(":");
+    out.code = parts[parts.length - 1];
     const tags = parts.slice(0, parts.length - 1);
 
-    code = base;
-
-    for (const tag of tags) {
+    tags.forEach((tag) => {
       if (tag === "ECHO") {
-        isEcho = true;
+        out.isEcho = true;
       } else if (tag.startsWith("B")) {
         const n = parseInt(tag.slice(1), 10);
-        if (Number.isFinite(n)) degreeOffset = n;
+        if (Number.isFinite(n)) out.degreeOffset = n;
       }
-    }
+    });
+  }
+
+  return out;
+}
+
+function triggerKey(rawCode, { fromPlayback = false, velocity = null, eventTime = null } = {}) {
+  const parsed = parseCodeToken(rawCode);
+  const code = parsed.code;
+
+  // REST tokens from the composer: advance time but do nothing visually
+  if (!code || code === "__REST__") {
+    return;
   }
 
   // Allow recorded codes and the explicit space character
@@ -1082,20 +1323,229 @@ function triggerKey(rawCode, { fromPlayback = false } = {}) {
     // Live typing / recording:
     // - store the real code in recordedSequence
     // - update Spell a Song text (which maps action keys -> spaces)
-    recordingService.recordKey(code);
-    updateTypedTextForUserKey(code);
+    recordingService.recordKey(code, { velocity, eventTime });
+    updateTypedTextForUserKey(code, { velocity, eventTime });
   }
 
   // Playback:
   // - action keys light up their own key
   // - space (" ") lights the spacebar
   // - echo hits can walk the bass (degreeOffset) and get special visuals
-  playTone(code, { degreeOffset });
-  flashKey(code, { isEcho });
+  playTone(code, { degreeOffset: parsed.degreeOffset, velocity });
+  flashKey(code, { isEcho: parsed.isEcho, velocity });
 }
 
 function applyPlaybackCardHighlight() {
   savedGridView?.highlight(getState().playback.id);
+}
+
+function exportSongs(selectedIds = null) {
+  const recordings = getSavedRecordings();
+  if (!Array.isArray(recordings) || !recordings.length) return;
+
+  const idSet =
+    selectedIds && selectedIds.size
+      ? selectedIds
+      : new Set(
+          Array.from(document.querySelectorAll(".saved-card-select:checked")).map(
+            (el) => el.closest(".saved-card")?.dataset.id
+          )
+        );
+
+  const listToExport =
+    idSet.size > 0 ? recordings.filter((r) => idSet.has(r.id)) : recordings;
+  if (!listToExport.length) return;
+
+  const payload = {
+    version: 1,
+    app: "keysonic",
+    exportedAt: new Date().toISOString(),
+    stepNoteValue: SONG_STEP_NOTE_VALUE,
+    recordings: [],
+  };
+
+  listToExport.forEach((entry) => {
+    const playbackSequence = buildPlaybackSequence(entry);
+    const songMeta = buildSongExportFromEntry(entry, playbackSequence);
+    payload.recordings.push({
+      id: entry.id,
+      name: entry.name,
+      loop: !!entry.loop,
+      reverse: !!entry.reverse,
+      compose: !!entry.compose,
+      settings: entry.settings || null,
+      sequence: Array.isArray(entry.sequence) ? entry.sequence.slice() : [],
+      playSequence: Array.isArray(entry.playSequence)
+        ? entry.playSequence.slice()
+        : Array.isArray(entry.sequence)
+        ? entry.sequence.slice()
+        : [],
+      playbackSequence,
+      events: songMeta?.events || [],
+      notes:
+        songMeta?.events?.map((ev) => ev.note).filter(Boolean) || [],
+    });
+  });
+
+  const stamp = buildTimestampLabel();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `keysonic-songs-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 0);
+}
+
+function getSelectedExportIds() {
+  const ids = new Set();
+  if (exportList) {
+    exportList.querySelectorAll('input[type="checkbox"]:checked').forEach((el) => {
+      if (el.value) ids.add(el.value);
+    });
+  }
+  return ids;
+}
+
+function openExportModal() {
+  if (!exportModal || !exportList) return;
+  const recordings = getSavedRecordings();
+  exportList.innerHTML = "";
+  if (!recordings.length) {
+    const p = document.createElement("p");
+    p.textContent = "No saved songs to export.";
+    exportList.appendChild(p);
+  } else {
+    recordings.forEach((rec) => {
+      const wrap = document.createElement("label");
+      wrap.className = "export-item";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = rec.id;
+      checkbox.checked = false;
+      const title = document.createElement("span");
+      title.textContent = rec.name || "Recording";
+      const meta = document.createElement("small");
+      meta.textContent = `${(rec.sequence || []).length} notes`;
+      const textWrap = document.createElement("div");
+      textWrap.appendChild(title);
+      textWrap.appendChild(meta);
+      wrap.appendChild(checkbox);
+      wrap.appendChild(textWrap);
+      exportList.appendChild(wrap);
+    });
+  }
+  updateSelectAllToggle();
+  exportModal.classList.remove("hidden");
+}
+
+function closeExportModal() {
+  if (exportModal) {
+    exportModal.classList.add("hidden");
+  }
+}
+
+function toggleActionMenu(forceClose = false) {
+  if (!actionMenuList) return;
+  const nextOpen = forceClose ? false : actionMenuList.hidden;
+  actionMenuList.hidden = !nextOpen;
+  if (actionMenuToggle) {
+    actionMenuToggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+  }
+}
+
+function handleSelectAllToggle() {
+  const shouldCheck = !!exportSelectAllToggle?.checked;
+  const checkboxes = exportList
+    ? Array.from(exportList.querySelectorAll('input[type="checkbox"]'))
+    : [];
+  checkboxes.forEach((cb) => {
+    cb.checked = shouldCheck;
+  });
+}
+
+function updateSelectAllToggle() {
+  if (!exportSelectAllToggle) return;
+  const boxes = exportList
+    ? Array.from(exportList.querySelectorAll('input[type="checkbox"]'))
+    : [];
+  if (!boxes.length) {
+    exportSelectAllToggle.checked = false;
+    exportSelectAllToggle.indeterminate = false;
+    exportSelectAllToggle.disabled = true;
+    return;
+  }
+  exportSelectAllToggle.disabled = false;
+  const checked = boxes.filter((cb) => cb.checked).length;
+  exportSelectAllToggle.checked = checked === boxes.length;
+  exportSelectAllToggle.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function importSongPack(data) {
+  if (!data || typeof data !== "object") return;
+
+  const incoming = Array.isArray(data.recordings) ? data.recordings : [];
+  if (!incoming.length) return;
+
+  const existing = getSavedRecordings().slice();
+  const next = existing.slice();
+
+  incoming.forEach((raw) => {
+    const playSeq =
+      Array.isArray(raw.playSequence) && raw.playSequence.length
+        ? raw.playSequence
+        : Array.isArray(raw.sequence) && raw.sequence.length
+        ? raw.sequence
+        : [];
+    if (!playSeq.length) return;
+
+    const displaySeq =
+      Array.isArray(raw.sequence) && raw.sequence.length
+        ? raw.sequence
+        : recordingRepo.toDisplaySequence(playSeq);
+
+    const baseName = raw.name || "Recording";
+    const name = recordingRepo.makeUniqueName(baseName, next);
+
+    const entry = recordingRepo.createRecording({
+      name,
+      playSequence: playSeq,
+      displaySequence: displaySeq,
+      timedEvents:
+        Array.isArray(raw.timedEvents) && raw.timedEvents.length
+          ? raw.timedEvents
+          : undefined,
+      settings: raw.settings || undefined,
+    });
+
+    next.push({
+      ...entry,
+      loop: !!raw.loop,
+      reverse: !!raw.reverse,
+      compose: !!raw.compose,
+    });
+  });
+
+  if (next.length !== existing.length) {
+    setSavedRecordings(next);
+  }
+}
+
+function buildTimestampLabel() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 }
 
 // musical symbols******************************************
@@ -1316,31 +1766,33 @@ function toSuperscriptDigits(num) {
     .join("");
 }
 
-function buildSongExportFromEntry(entry) {
+function buildSongExportFromEntry(entry, playbackSequence) {
   if (!entry) return null;
 
   const baseSeq =
-    Array.isArray(entry.playSequence) && entry.playSequence.length
-      ? entry.playSequence
-      : Array.isArray(entry.sequence)
-      ? entry.sequence
-      : [];
+    Array.isArray(playbackSequence) && playbackSequence.length
+      ? playbackSequence
+      : buildPlaybackSequence(entry);
 
   if (!baseSeq.length || typeof getFrequencyForCode !== "function") {
     return null;
   }
 
-  const keyId = getScaleContextId() || null;
-  const liveTempo = getState().tempo;
-  const tempoBpm = typeof liveTempo === "number" && liveTempo > 0 ? liveTempo : 120;
-
   const events = [];
 
   for (let i = 0; i < baseSeq.length; i++) {
     const rawCode = baseSeq[i];
-    const code = rawCode === " " ? "Space" : rawCode;
+    const parsed = parseCodeToken(rawCode);
+    const code = parsed.code === "Space" ? " " : parsed.code;
 
-    const freq = getFrequencyForCode(code);
+    if (!code) continue;
+
+    if (code === "__REST__") {
+      events.push({ step: i, type: "rest" });
+      continue;
+    }
+
+    const freq = getFrequencyForCode(code, parsed.degreeOffset);
     if (!freq || !isFinite(freq) || freq <= 0) {
       continue; // skip non-tonal / invalid
     }
@@ -1349,14 +1801,19 @@ function buildSongExportFromEntry(entry) {
     if (!isFinite(midi)) continue;
 
     const name = noteNameFromMidi_Strict(midi);
-    if (!name || name === "♪") continue;
+    if (!name || name === "?T?") continue;
 
-    events.push({
+    const ev = {
       step: i, // discrete position (0,1,2,...) at SONG_STEP_NOTE_VALUE each
+      code,
       midi,
-      note: name, // e.g. "C♯4" or "B♭3"
-      // dynamics / articulations could be added here later in a deterministic way
-    });
+      note: name, // e.g. "C?T_4" or "B?T-3"
+      freq: Number(freq.toFixed(3)),
+    };
+    if (parsed.degreeOffset) ev.degreeOffset = parsed.degreeOffset;
+    if (parsed.isEcho) ev.echo = true;
+
+    events.push(ev);
   }
 
   if (!events.length) return null;
@@ -1364,12 +1821,14 @@ function buildSongExportFromEntry(entry) {
   return {
     id: entry.id,
     name: entry.name,
-    key: keyId,
-    tempo: tempoBpm,
+    settings: entry.settings || null,
+    key: getScaleContextId() || null,
+    tempo: getState().tempo || 1,
     stepNoteValue: SONG_STEP_NOTE_VALUE,
     events,
   };
 }
+
 
 function getNoteGlyphForCode(code) {
   const effectiveCode = code === " " ? "Space" : code;

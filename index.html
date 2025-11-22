@@ -38,6 +38,17 @@
 
     <!-- Controls -->
     <div id="wm-controls">
+      <div id="action-menu">
+        <button id="action-menu-toggle" aria-label="Open menu">☰</button>
+        <div id="action-menu-list" hidden>
+        <button type="button" id="menu-import">Import Songs</button>
+        <button type="button" id="menu-export">Export Songs</button>
+        <div class="menu-theme-row">
+          <label for="theme-select">Theme</label>
+          <select id="theme-select"></select>
+        </div>
+      </div>
+    </div>
       <button data-action="record" id="record-btn">Record</button>
       <button data-action="stop" id="stop-btn">Stop</button>
       <button data-action="clear" id="clear-btn">Clear</button>
@@ -74,14 +85,30 @@
         Instrument
         <select id="instrument-select"></select>
       </label>
-      <label id="theme-label" class="theme-label">
-        Theme
-        <select id="theme-select"></select>
-      </label>
     </div>
 
     <!-- Saved recordings grid -->
     <div id="wm-saved-grid"></div>
+    <input type="file" id="import-file-input" accept="application/json" hidden />
+
+    <div id="export-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Select songs to export</h3>
+          <button type="button" id="export-modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="export-select-all">
+          <label>
+            <input type="checkbox" id="export-select-all-toggle" />
+            Select all songs
+          </label>
+        </div>
+        <div id="export-list"></div>
+        <div class="modal-actions">
+          <button type="button" id="export-modal-export">Export Selected</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="keysonic.js"></script>
   </body>

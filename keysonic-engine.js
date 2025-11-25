@@ -62,6 +62,7 @@ let volumeSlider;
 let volumeValueEl;
 let audioModeSelect;
 let lastKeydownTime = null;
+const keyDownTimes = new Map();
 
 let numpadRobotEl = null;
 let numpadRobotEyes = [];
@@ -480,6 +481,9 @@ export function initKeysonic() {
       handleFirstInteraction();
       triggerKey(code);
     },
+    onKeyRelease: (code) => {
+      audioService?.stopHeldNote(code);
+    },
   });
 
   const { keyElements: builtKeys, keyboardEls: builtBoards } = keyboardView.mount();
@@ -542,6 +546,7 @@ function wireAudioUnlock() {
 
 function wireKeyboardEvents() {
   window.addEventListener("keydown", handleKeydown);
+  window.addEventListener("keyup", handleKeyup);
 }
 
 function wireControlEvents() {
@@ -726,6 +731,7 @@ function handleKeydown(e) {
     velocity = 0.3 + t * (1.0 - 0.3);
   }
   lastKeydownTime = now;
+  keyDownTimes.set(mapped, now);
 
   if (
     mapped === "Tab" ||
@@ -738,6 +744,13 @@ function handleKeydown(e) {
   }
 
   triggerKey(mapped, { velocity, eventTime: now });
+}
+
+function handleKeyup(e) {
+  const mapped = normalizeEventToCode(e);
+  if (!mapped) return;
+  keyDownTimes.delete(mapped);
+  audioService?.stopHeldNote(mapped);
 }
 
 function handleRecordClick() {
@@ -1028,6 +1041,7 @@ function restartPlaybackFromEntry(entry, opts = {}) {
 
 function stopPlayback() {
   playbackService.stop();
+  audioService?.stopAllHeldNotes?.();
 }
 
 function updateControls() {
@@ -1319,10 +1333,14 @@ function resetKeyboardShadow() {
 }
 
 function playTone(code, opts = {}) {
-  const { degreeOffset = 0, velocity = null } = opts;
+  const { degreeOffset = 0, velocity = null, fromPlayback = false } = opts;
   const freq = getFrequencyForCode(code, degreeOffset);
   if (!freq || !audioService) return;
-  audioService.playFrequency(freq, velocity);
+  if (fromPlayback) {
+    audioService.playFrequency(freq, velocity);
+  } else {
+    audioService.startHeldNote(freq, velocity, code);
+  }
 }
 
 function flashKey(code, { isEcho = false, velocity = null } = {}) {
@@ -1421,7 +1439,7 @@ function triggerKey(rawCode, { fromPlayback = false, velocity = null, eventTime 
   // - action keys light up their own key
   // - space (" ") lights the spacebar
   // - echo hits can walk the bass (degreeOffset) and get special visuals
-  playTone(code, { degreeOffset: parsed.degreeOffset, velocity });
+  playTone(code, { degreeOffset: parsed.degreeOffset, velocity, fromPlayback });
   flashKey(code, { isEcho: parsed.isEcho, velocity });
 }
 

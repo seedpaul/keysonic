@@ -27,6 +27,7 @@ export function getDomRefs() {
   const exportBtn = document.getElementById('export-btn');
   const importBtn = document.getElementById('import-btn');
   const importFileInput = document.getElementById('import-file-input');
+  const audioModeSelect = document.getElementById('audio-mode-select');
 
   return {
     titleEl,
@@ -41,6 +42,7 @@ export function getDomRefs() {
     clearBtn,
     saveTypedBtn,
     importFileInput,
+    audioModeSelect,
     actionMenuToggle,
     actionMenuList,
     menuImportBtn,
@@ -62,6 +64,7 @@ export class KeyboardView {
     numpadContainer,
     getHueForCode,
     onKeyPress,
+    onKeyRelease = null,
   }) {
     this.layoutMain = layoutMain;
     this.layoutNumpadGrid = layoutNumpadGrid;
@@ -69,6 +72,7 @@ export class KeyboardView {
     this.numpadContainer = numpadContainer;
     this.getHueForCode = getHueForCode;
     this.onKeyPress = onKeyPress;
+    this.onKeyRelease = onKeyRelease;
     this.keyElements = {};
     this.keyboardEls = [];
   }
@@ -100,10 +104,13 @@ export class KeyboardView {
         const hue = this.getHueForCode(String(k.code));
         keyEl.dataset.code = k.code;
         keyEl.dataset.hue = String(hue);
+
         keyEl.addEventListener('mousedown', (ev) => {
           ev.preventDefault();
           this.onKeyPress(k.code);
         });
+        keyEl.addEventListener('mouseup', () => this.onKeyRelease?.(k.code));
+        keyEl.addEventListener('mouseleave', () => this.onKeyRelease?.(k.code));
         keyEl.addEventListener(
           'touchstart',
           (ev) => {
@@ -112,6 +119,17 @@ export class KeyboardView {
           },
           { passive: false },
         );
+        keyEl.addEventListener(
+          'touchend',
+          () => this.onKeyRelease?.(k.code),
+          { passive: true },
+        );
+        keyEl.addEventListener(
+          'touchcancel',
+          () => this.onKeyRelease?.(k.code),
+          { passive: true },
+        );
+
         if (!this.keyElements[k.code]) this.keyElements[k.code] = [];
         this.keyElements[k.code].push(keyEl);
         rowEl.appendChild(keyEl);
@@ -128,13 +146,14 @@ export class KeyboardView {
       toggle.type = 'button';
       toggle.className = 'numpad-toggle';
       toggle.setAttribute('aria-label', 'Toggle number pad visibility');
-      toggle.textContent = wrapper.classList.contains('numpad-collapsed') ? '➕' : '➖';
+      toggle.textContent = wrapper.classList.contains('numpad-collapsed') ? '⤢' : '⤡';
       wrapper.appendChild(toggle);
       toggle.addEventListener('click', () => {
         const collapsed = wrapper.classList.toggle('numpad-collapsed');
-        toggle.textContent = collapsed ? '➕' : '➖';
+        toggle.textContent = collapsed ? '⤢' : '⤡';
       });
     }
+
     this.numpadContainer.innerHTML = '';
     this.layoutNumpadGrid.forEach((k) => {
       const keyEl = document.createElement('div');
@@ -148,10 +167,13 @@ export class KeyboardView {
       const hue = this.getHueForCode(String(k.code));
       keyEl.dataset.code = k.code;
       keyEl.dataset.hue = String(hue);
+
       keyEl.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
         this.onKeyPress(k.code);
       });
+      keyEl.addEventListener('mouseup', () => this.onKeyRelease?.(k.code));
+      keyEl.addEventListener('mouseleave', () => this.onKeyRelease?.(k.code));
       keyEl.addEventListener(
         'touchstart',
         (ev) => {
@@ -160,6 +182,17 @@ export class KeyboardView {
         },
         { passive: false },
       );
+      keyEl.addEventListener(
+        'touchend',
+        () => this.onKeyRelease?.(k.code),
+        { passive: true },
+      );
+      keyEl.addEventListener(
+        'touchcancel',
+        () => this.onKeyRelease?.(k.code),
+        { passive: true },
+      );
+
       if (!this.keyElements[k.code]) this.keyElements[k.code] = [];
       this.keyElements[k.code].push(keyEl);
       this.numpadContainer.appendChild(keyEl);
@@ -175,37 +208,31 @@ export class NowPlayingView {
 
   setLabel(label) {
     if (!this.el) return [];
-    const text = (label || '').trim();
     this.el.innerHTML = '';
-    if (!text) {
-      document.body.classList.remove('has-now-playing');
-      this.chars = [];
-      return this.chars;
-    }
-    document.body.classList.add('has-now-playing');
-    const wrapper = document.createElement('span');
-    wrapper.className = 'now-playing-word';
-    const spans = [];
-    for (const ch of text) {
+    const text = (label || '').trim();
+    if (!text) return [];
+    this.chars = text.split('').map((ch) => {
       const span = document.createElement('span');
-      span.className = 'now-playing-char';
       span.textContent = ch;
-      wrapper.appendChild(span);
-      spans.push(span);
-    }
-    this.el.appendChild(wrapper);
-    this.chars = spans;
-    return spans;
+      this.el.appendChild(span);
+      return span;
+    });
+    return this.chars;
   }
 
   tint(sequence, getHueForCode, getToneColor) {
-    if (!this.chars?.length || !sequence?.length) return;
+    if (!this.chars || !this.chars.length || !Array.isArray(sequence)) return;
     this.chars.forEach((span, idx) => {
       const code = sequence[idx % sequence.length];
       const hue = getHueForCode(code);
-      span.style.color = getToneColor ? getToneColor(hue) : `hsl(${hue}, 90%, 55%)`;
-      span.style.transform = '';
-      span.style.fontWeight = '600';
+      if (!isNaN(hue) && span.textContent.trim() !== '') {
+        span.style.color = getToneColor ? getToneColor(hue) : `hsl(${hue}, 90%, 55%)`;
+        span.style.transform = 'translateY(-1px)';
+        span.style.fontWeight = '800';
+      } else {
+        span.style.transform = '';
+        span.style.fontWeight = '600';
+      }
     });
   }
 
@@ -239,15 +266,19 @@ export class SavedGridView {
       if (entry.loop) card.classList.add('looping');
       if (entry.reverse) card.classList.add('reversed');
       if (entry.compose) card.classList.add('composed');
+
       const title = document.createElement('div');
       title.className = 'saved-card-title';
       title.textContent = entry.name || '';
+
       const meta = document.createElement('div');
       meta.className = 'saved-card-meta';
       const noteCount = Array.isArray(entry.sequence) ? entry.sequence.length : 0;
       meta.textContent = `${noteCount} note${noteCount === 1 ? '' : 's'}`;
-                  const playIndicator = document.createElement('div');
+
+      const playIndicator = document.createElement('div');
       playIndicator.className = 'saved-card-play-indicator';
+
       const actions = document.createElement('div');
       actions.className = 'saved-card-actions';
       const selectInput = document.createElement('input');
@@ -255,20 +286,25 @@ export class SavedGridView {
       selectInput.className = 'saved-card-select';
       selectInput.title = 'Select for export';
       selectInput.setAttribute('aria-label', 'Select for export');
-      const loopBtn = this.#buildButton('saved-card-loop-toggle', 'Loop this song', '↻');
+
+      const loopBtn = this.#buildButton('saved-card-loop-toggle', 'Loop this song', '⟳');
       loopBtn.style.fontSize = '0.9em';
-      const reverseBtn = this.#buildButton(
-        'saved-card-reverse-toggle',
-        'Play this song backwards',
-        '↺',
-      );
+      const reverseBtn = this.#buildButton('saved-card-reverse-toggle', 'Play this song backwards', '⇄');
       reverseBtn.style.fontSize = '0.9em';
       const composeBtn = this.#buildButton('saved-card-compose-toggle', 'Funkified', '🔥');
       composeBtn.style.fontSize = '0.9em';
       composeBtn.setAttribute('aria-pressed', entry.compose ? 'true' : 'false');
       const delBtn = this.#buildButton('saved-card-delete', 'Delete this song', '🗑️');
       delBtn.style.fontSize = '0.75em';
-      actions.append(loopBtn, reverseBtn, composeBtn, delBtn);
+      const applySettingsBtn = this.#buildButton(
+        'saved-card-apply-settings',
+        'Apply current settings to this song',
+        '💾'
+      );
+      applySettingsBtn.style.fontSize = '0.9em';
+      applySettingsBtn.hidden = true;
+
+      actions.append(loopBtn, reverseBtn, composeBtn, delBtn, applySettingsBtn);
       card.append(title, meta, playIndicator, actions);
       this.container.appendChild(card);
     });
@@ -320,6 +356,17 @@ export class SavedGridView {
       }
     });
   }
+
+  setSettingsDirty(recordId, dirty) {
+    if (!this.container) return;
+    const card = this.container.querySelector(`.saved-card[data-id="${recordId}"]`);
+    if (!card) return;
+    card.classList.toggle('settings-dirty', !!dirty);
+    const btn = card.querySelector('.saved-card-apply-settings');
+    if (btn) {
+      btn.hidden = !dirty;
+    }
+  }
 }
 
 export class TypedTextView {
@@ -353,4 +400,3 @@ export class TypedTextView {
     }
   }
 }
-

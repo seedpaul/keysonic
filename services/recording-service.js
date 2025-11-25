@@ -6,10 +6,12 @@ import { mapCodeToCharForTyping } from '../typing-utils.js';
 class RecordingService {
   constructor() {
     this._startTime = null;
+    this._downTimes = new Map();
   }
 
   start() {
     this._startTime = null;
+    this._downTimes.clear();
     store.mutate((state) => {
       state.isRecording = true;
       state.isPlayingBack = false;
@@ -26,6 +28,7 @@ class RecordingService {
 
   clear() {
     this._startTime = null;
+    this._downTimes.clear();
     store.mutate((state) => {
       state.recordedSequence = [];
       state.recordedEvents = [];
@@ -36,6 +39,7 @@ class RecordingService {
 
   clearRecordedSequence() {
     this._startTime = null;
+    this._downTimes.clear();
     store.mutate((state) => {
       state.recordedSequence = [];
       state.recordedEvents = [];
@@ -52,6 +56,7 @@ class RecordingService {
     const eventTime = Number.isFinite(meta.eventTime) ? meta.eventTime : now;
     const offsetMs = Math.max(0, Math.round(eventTime - this._startTime));
     const velocity = Number.isFinite(meta.velocity) ? meta.velocity : undefined;
+    this._downTimes.set(code, eventTime);
 
     store.mutate((draft) => {
       draft.recordedSequence.push(code);
@@ -59,6 +64,39 @@ class RecordingService {
         code,
         offsetMs,
         ...(velocity !== undefined ? { velocity } : {}),
+      });
+    });
+  }
+
+  recordKeyRelease(code, meta = {}) {
+    const state = store.getState();
+    if (!state.isRecording || state.isPlayingBack) return;
+    const now =
+      Number.isFinite(meta.eventTime) && meta.eventTime >= 0
+        ? meta.eventTime
+        : typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    if (this._startTime === null) {
+      this._startTime = now;
+    }
+    const offsetMs = Math.max(0, Math.round(now - this._startTime));
+    const downAt = this._downTimes.get(code);
+    const durationMs =
+      Number.isFinite(downAt) && downAt <= now ? Math.max(1, Math.round(now - downAt)) : undefined;
+
+    store.mutate((draft) => {
+      for (let i = draft.recordedEvents.length - 1; i >= 0; i--) {
+        const ev = draft.recordedEvents[i];
+        if (ev && ev.code === code && ev.durationMs === undefined) {
+          if (durationMs !== undefined) ev.durationMs = durationMs;
+          return;
+        }
+      }
+      draft.recordedEvents.push({
+        code,
+        offsetMs,
+        ...(durationMs !== undefined ? { durationMs } : {}),
       });
     });
   }
@@ -99,6 +137,7 @@ class RecordingService {
 
   resetTyped() {
     this._startTime = null;
+    this._downTimes.clear();
     store.mutate((state) => {
       state.typedText = '';
       state.typedCodeSequence = [];

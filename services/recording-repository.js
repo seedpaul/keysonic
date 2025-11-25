@@ -63,7 +63,7 @@ export class RecordingRepository {
    * @param {string} params.name
    * @param {string[]} params.playSequence
    * @param {string[]} [params.displaySequence]
-   * @param {{ code: string, offsetMs: number, velocity?: number }[]} [params.timedEvents]
+   * @param {{ code: string, offsetMs: number, velocity?: number, durationMs?: number }[]} [params.timedEvents]
    * @returns {import('../types.js').RecordingEntry}
    */
   createRecording({ name, playSequence, displaySequence, timedEvents, settings }) {
@@ -77,6 +77,7 @@ export class RecordingRepository {
             code: String(t.code || ''),
             offsetMs: Math.max(0, Number(t.offsetMs) || 0),
             ...(Number.isFinite(t.velocity) ? { velocity: Number(t.velocity) } : {}),
+            ...(Number.isFinite(t.durationMs) ? { durationMs: Math.max(1, Number(t.durationMs)) } : {}),
           }))
         : undefined;
 
@@ -86,6 +87,7 @@ export class RecordingRepository {
             ...(Number.isFinite(settings.tempo) ? { tempo: Number(settings.tempo) } : {}),
             ...(settings.scaleId ? { scaleId: settings.scaleId } : {}),
             ...(settings.instrument ? { instrument: settings.instrument } : {}),
+            ...(settings.engine ? { engine: settings.engine } : {}),
             ...(Number.isFinite(settings.rootFreq) ? { rootFreq: Number(settings.rootFreq) } : {}),
           }
         : undefined;
@@ -142,6 +144,7 @@ export class RecordingRepository {
             code: t.code,
             offsetMs: Math.max(0, Number(t.offsetMs) || 0),
             ...(Number.isFinite(t.velocity) ? { velocity: Number(t.velocity) } : {}),
+            ...(Number.isFinite(t.durationMs) ? { durationMs: Math.max(1, Number(t.durationMs)) } : {}),
           }))
       : undefined;
     const settings =
@@ -150,6 +153,7 @@ export class RecordingRepository {
             ...(Number.isFinite(raw.settings.tempo) ? { tempo: Number(raw.settings.tempo) } : {}),
             ...(raw.settings.scaleId ? { scaleId: raw.settings.scaleId } : {}),
             ...(raw.settings.instrument ? { instrument: raw.settings.instrument } : {}),
+            ...(raw.settings.engine ? { engine: raw.settings.engine } : {}),
             ...(Number.isFinite(raw.settings.rootFreq) ? { rootFreq: Number(raw.settings.rootFreq) } : {}),
           }
         : undefined;

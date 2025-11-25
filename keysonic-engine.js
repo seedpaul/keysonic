@@ -60,6 +60,7 @@ let tempoSlider;
 let tempoValueEl;
 let volumeSlider;
 let volumeValueEl;
+let audioModeSelect;
 let lastKeydownTime = null;
 
 let numpadRobotEl = null;
@@ -77,6 +78,7 @@ let scaleSelect; // DOM ref for the <select>
 const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const INSTRUMENT_PREF_KEY = "keysonic-instrument-pref-v1";
 const VOLUME_PREF_KEY = "keysonic-volume-pref-v1";
+const AUDIO_MODE_PREF_KEY = "keysonic-audio-mode-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
 let themeSelect;
 let instrumentSelect;
@@ -101,6 +103,23 @@ let keyboardView;
 let nowPlayingView;
 let savedGridView;
 let typedTextView;
+const settingsDirtyIds = new Set();
+let suppressDirtyMarks = false;
+function markPlaybackSettingsDirty() {
+  if (suppressDirtyMarks) return;
+  const state = getState();
+  const id = state?.playback?.id;
+  if (!state?.isPlayingBack || !id) return;
+  if (settingsDirtyIds.has(id)) return;
+  settingsDirtyIds.add(id);
+  savedGridView?.setSettingsDirty(id, true);
+}
+
+function clearSettingsDirty(id) {
+  if (!id) return;
+  settingsDirtyIds.delete(id);
+  savedGridView?.setSettingsDirty(id, false);
+}
 
 const getState = () => store.getState();
 
@@ -109,6 +128,7 @@ function applyInstrument(id) {
   if (audioService?.setInstrument) {
     audioService.setInstrument(sanitized === "legacy" ? "sine" : sanitized);
   }
+  markPlaybackSettingsDirty();
   try {
     localStorage.setItem(INSTRUMENT_PREF_KEY, sanitized);
   } catch (err) {
@@ -129,11 +149,31 @@ function getCurrentInstrumentId() {
   return "piano";
 }
 
+function applyEngine(mode) {
+  const resolved =
+    audioService && typeof audioService.setAudioMode === "function"
+      ? audioService.setAudioMode(mode)
+      : audioService && typeof audioService.setEngine === "function"
+      ? audioService.setEngine(mode)
+      : "classic";
+  markPlaybackSettingsDirty();
+  try {
+    localStorage.setItem(AUDIO_MODE_PREF_KEY, resolved);
+  } catch (err) {
+    // ignore storage issues
+  }
+  return resolved;
+}
+
 function getCurrentSettingsSnapshot() {
   return {
     tempo: getState().tempo || 1,
     scaleId: currentScaleId,
     instrument: getCurrentInstrumentId(),
+    engine:
+      (audioService?.getAudioMode && audioService.getAudioMode()) ||
+      (audioService?.getEngine && audioService.getEngine()) ||
+      "classic",
     rootFreq,
   };
 }
@@ -208,6 +248,7 @@ function setSavedRecordings(next) {
   savedGridView.render(next);
   applyColorsToSavedTitles();
   savedGridView.highlight(getState().playback.id);
+  settingsDirtyIds.forEach((id) => savedGridView?.setSettingsDirty(id, true));
 }
 
 function updateRecording(id, mutator) {
@@ -254,6 +295,7 @@ function applyScale(nextScaleId) {
   if (!SCALES[target]) return currentScaleId;
 
   currentScaleId = target;
+  markPlaybackSettingsDirty();
   try {
     localStorage.setItem(SCALE_PREF_KEY, target);
   } catch (err) {
@@ -382,6 +424,7 @@ export function initKeysonic() {
   tempoValueEl = document.getElementById("tempo-value");
   volumeSlider = document.getElementById("volume-slider");
   volumeValueEl = document.getElementById("volume-value");
+  audioModeSelect = document.getElementById("audio-mode-select");
   typedBackspaceBtn = document.getElementById("typed-backspace-btn");
 
   if (tempoSlider) {
@@ -411,6 +454,18 @@ export function initKeysonic() {
 
   if (typedBackspaceBtn) {
     typedBackspaceBtn.addEventListener("click", handleTypedBackspaceClick);
+  }
+
+  if (audioModeSelect) {
+    const savedMode = localStorage.getItem(AUDIO_MODE_PREF_KEY) || "classic";
+    const active = applyEngine(savedMode);
+    audioModeSelect.value = active;
+    audioModeSelect.addEventListener("change", () => {
+      const resolved = applyEngine(audioModeSelect.value);
+      audioModeSelect.value = resolved;
+    });
+  } else {
+    applyEngine("classic");
   }
 
   computeKeyOrder();
@@ -580,6 +635,7 @@ function handlePlaybackStarted(snapshot) {
     applyPlaybackSettings(snapshot.settings);
     retintNowPlaying();
   }
+  clearSettingsDirty(snapshot?.id);
   applyPlaybackCardHighlight();
   updateControls();
 }
@@ -616,6 +672,13 @@ function applyPlaybackSettings(source) {
 
   if (Number.isFinite(settings.rootFreq)) {
     rootFreq = Number(settings.rootFreq);
+  }
+
+  if (typeof settings.engine === "string") {
+    const resolved = applyEngine(settings.engine);
+    if (audioModeSelect) {
+      audioModeSelect.value = resolved;
+    }
   }
 
   retintNowPlaying();
@@ -859,6 +922,28 @@ function handleSavedGridClick(e) {
     return;
   }
 
+  const applySettingsBtn = e.target.closest(".saved-card-apply-settings");
+  if (applySettingsBtn) {
+    const card = applySettingsBtn.closest(".saved-card");
+    if (!card) return;
+    const id = card.dataset.id;
+    const recordings = getSavedRecordings();
+    const entry = recordings.find((r) => r.id === id);
+    if (!entry) return;
+
+    const nextSettings = getCurrentSettingsSnapshot();
+    updateRecording(id, (rec) => ({ ...rec, settings: nextSettings }));
+    clearSettingsDirty(id);
+
+    if (getState().isPlayingBack && getState().playback.id === id) {
+      const updatedEntry = getSavedRecordings().find((r) => r.id === id);
+      if (updatedEntry) restartPlaybackFromEntry(updatedEntry, { preserveTyped: true });
+    }
+
+    e.stopPropagation();
+    return;
+  }
+
   const card = e.target.closest(".saved-card");
   if (!card) return;
 
@@ -869,6 +954,7 @@ function handleSavedGridClick(e) {
   // If this card is currently playing, treat click as a STOP toggle
   if (getState().isPlayingBack && getState().playback.id === id) {
     stopPlayback();
+    clearSettingsDirty(id);
     return;
   }
 
@@ -922,6 +1008,10 @@ function startPlaybackFromEntry(entry, { preserveTyped = false } = {}) {
   if (!seq.length) return;
   if (!preserveTyped) {
     resetTypedText();
+  }
+  clearSettingsDirty(entry.id);
+  if (entry.settings) {
+    applyPlaybackSettings(entry.settings);
   }
   playbackService.play({
     sequence: seq,

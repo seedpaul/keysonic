@@ -4,7 +4,7 @@
       rgba(255, 255, 255, 0.01),
       rgba(255, 255, 255, 0.01)
     ),
-    url("assets/cartoon-style-musical-notes-background.jpg");
+    url("assets/daylight_pop.png");
   --body-bg-size: cover;
   --body-bg-position: center;
   --body-bg-repeat: no-repeat;
@@ -499,6 +499,7 @@ body.has-now-playing #now-playing-fieldset {
   min-height: 44px;
   padding: 10px 14px;
   font-size: 18px;
+  color: var(--control-text);
   border-radius: var(--radius-key);
   border: 1px solid var(--control-border);
   background: var(--control-bg);
@@ -529,10 +530,22 @@ body.has-now-playing #now-playing-fieldset {
   padding: 10px 12px;
   font-size: 14px;
   text-align: left;
+  color: var(--control-text);
   border-radius: var(--radius-key);
   border: 1px solid var(--border-soft);
   background: var(--panel-strong);
   cursor: pointer;
+  box-shadow: var(--panel-shadow);
+  transition: background-color var(--transition-fast),
+    color var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+#action-menu-list button:hover:enabled {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+  color: var(--control-text);
+  box-shadow: var(--panel-shadow-strong);
 }
 
 #action-menu-list[hidden] {
@@ -708,12 +721,6 @@ body.has-now-playing #now-playing-fieldset {
     color var(--transition-fast), transform var(--transition-fastest);
 }
 
-.saved-card-delete:hover {
-  background-color: rgb(250, 123, 64);
-  color: black;
-  border: 1px solid rgb(250, 123, 64);
-}
-
 .saved-card-actions {
   display: flex;
   align-items: center;
@@ -733,6 +740,51 @@ body.has-now-playing #now-playing-fieldset {
   min-height: 36px;
   padding: 6px 8px;
   font-size: 12px;
+  color: var(--control-text);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-key);
+  box-shadow: var(--panel-shadow);
+  transition: background-color var(--transition-fast),
+    color var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast), transform var(--transition-fastest);
+}
+
+.saved-card-actions button:hover:enabled {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+  color: var(--control-text);
+  box-shadow: var(--panel-shadow-strong);
+  transform: translateY(-1px);
+}
+
+.saved-card-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+.saved-card-delete:hover:enabled {
+  background-color: #f97316;
+  border-color: #f97316;
+  color: #0f172a;
+  box-shadow: var(--panel-shadow-strong);
+}
+
+.saved-card-actions .saved-card-apply-settings:hover:enabled {
+  background-color: #e0f2fe;
+  border-color: #38bdf8;
+  color: #0f172a;
+  box-shadow: var(--panel-shadow-strong);
+}
+
+/* Ensure delete hover color wins over the shared hover styling */
+.saved-card-actions .saved-card-delete:hover:enabled {
+  background-color: #f97316;
+  border-color: #f97316;
+  color: #0f172a;
+  box-shadow: var(--panel-shadow-strong);
 }
 
 /* Modal */
@@ -776,6 +828,7 @@ body.has-now-playing #now-playing-fieldset {
   border: none;
   background: none;
   font-size: 20px;
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -824,8 +877,20 @@ body.has-now-playing #now-playing-fieldset {
   border-radius: var(--radius-key);
   border: 1px solid var(--control-border);
   background: var(--control-bg);
+  color: var(--control-text);
   cursor: pointer;
   font-weight: 600;
+  box-shadow: var(--panel-shadow);
+  transition: background-color var(--transition-fast),
+    color var(--transition-fast), border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.modal-actions button:hover:enabled {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+  color: var(--control-text);
+  box-shadow: var(--panel-shadow-strong);
 }
 
 .saved-card-loop-toggle {

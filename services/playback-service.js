@@ -107,7 +107,12 @@ export class PlaybackService {
     const runStep = () => {
       const payload =
         item && typeof item === 'object'
-          ? { code: item.code, velocity: item.velocity, settings: item.settings }
+          ? {
+              code: item.code,
+              velocity: item.velocity,
+              settings: item.settings,
+              durationMs: item.durationMs,
+            }
           : { code: item, settings: playback.settings };
       const code = payload.code;
       this.#emit('step', {
@@ -117,9 +122,20 @@ export class PlaybackService {
         index,
         playbackId: playback.id,
         sequence,
+        durationMs: payload.durationMs,
       });
 
-      this.prevOffsetMs = currentOffset != null ? currentOffset : lastOffset;
+      const nextIdx = playback.reversed ? index - 1 : index + 1;
+      const nextEvent = sequence[nextIdx];
+      const nextOffset = this.#getOffsetMs(nextEvent);
+
+      // Look ahead so the next queue pass doesn't re-wait the same delta.
+      this.prevOffsetMs =
+        nextOffset != null
+          ? nextOffset
+          : currentOffset != null
+          ? currentOffset
+          : lastOffset;
 
       store.mutate((draft) => {
         const step = draft.playback.reversed ? -1 : 1;
@@ -127,10 +143,6 @@ export class PlaybackService {
       });
 
       let delayMs = STEP_BASE_MS / tempoVal;
-
-      const nextIdx = playback.reversed ? index - 1 : index + 1;
-      const nextEvent = sequence[nextIdx];
-      const nextOffset = this.#getOffsetMs(nextEvent);
 
       if (currentOffset != null && nextOffset != null) {
         const delta = Math.abs(nextOffset - currentOffset);

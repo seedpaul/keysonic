@@ -36,6 +36,13 @@ export function createPadGrid({
       const code =
         typeof getCodeForIndex === "function" ? getCodeForIndex(index) : null;
       if (code) {
+        const label = formatCodeLabel(code);
+        if (label) {
+          cell.textContent = label;
+          cell.setAttribute("aria-label", `${label} pad ${row + 1}-${col + 1}`);
+        }
+      }
+      if (code) {
         cell.dataset.code = code;
         const hue =
           typeof getHueForCode === "function" ? getHueForCode(code) : null;
@@ -105,4 +112,24 @@ export function createPadGrid({
       container.innerHTML = "";
     },
   };
+}
+
+function formatCodeLabel(code) {
+  if (!code || typeof code !== "string") return "";
+  if (code === " ") return "Space";
+  if (code === "ArrowUp") return "↑";
+  if (code === "ArrowDown") return "↓";
+  if (code === "ArrowLeft") return "←";
+  if (code === "ArrowRight") return "→";
+  if (code.startsWith("Numpad") && code.length > 6) {
+    const tail = code.slice(6);
+    if (tail === "Multiply") return "*";
+    if (tail === "Divide") return "/";
+    if (tail === "Add") return "+";
+    if (tail === "Subtract") return "-";
+    if (tail === "Decimal") return ".";
+    return tail;
+  }
+  if (code.length === 1) return code.toUpperCase();
+  return code;
 }

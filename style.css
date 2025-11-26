@@ -451,7 +451,7 @@ body {
 }
 
 #pad-grid-container {
-  margin: 14px auto 0;
+  margin: 5px auto 0;
 }
 
 /* ---------- Pad Grid ---------- */
@@ -459,16 +459,23 @@ body {
 .pad-grid-shell {
   display: flex;
   justify-content: center;
+  align-items: center;
+  width: min(90vw, 1200px);
+  padding: 8px 12px;
+  box-sizing: border-box;
 }
 
 .pad-grid {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  gap: 8px;
-  width: min(88vw, calc(80vh * 10 / 8));
-  height: min(72vh, calc(88vw * 8 / 10));
-  max-width: 100%;
+  gap: 1px;
+  aspect-ratio: 10 / 8;
+  --pad-span: min(94vw, calc(80vh * 10 / 8));
+  width: var(--pad-span);
+  max-width: 94vw;
+  height: min(80vh, calc(var(--pad-span) * 0.8));
+  max-height: 80vh;
 }
 
 .pad-cell {
@@ -484,6 +491,8 @@ body {
   transition: transform var(--transition-fast), filter var(--transition-fast),
     box-shadow var(--transition-fast);
   touch-action: manipulation;
+  font-weight: 800;
+  font-size: 14px;
 }
 
 .pad-cell:hover {

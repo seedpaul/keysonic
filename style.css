@@ -154,18 +154,26 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: flex-start;
 
   border-radius: var(--radius-key);
   border: 1px solid var(--border);
   background: var(--panel);
   box-shadow: var(--panel-shadow);
 }
+
+#typed-text,
+#now-playing {
+  width: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+}
 #typed-fieldset,
 #now-playing-fieldset {
-  flex: 0 1 auto;
-  min-width: 50vw; /* nice wide starting point */
-  max-width: 90vw; /* can grow with content */
-  width: fit-content; /* expand to fit text up to max-width */
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
 }
 
 .word-block legend {
@@ -244,21 +252,9 @@ body {
   font-weight: 700; /* bold */
 }
 
-/* Only one fieldset visible at a time */
-
-#typed-fieldset {
-  display: flex;
-}
-
+/* Show both info blocks */
+#typed-fieldset,
 #now-playing-fieldset {
-  display: none;
-}
-
-body.has-now-playing #typed-fieldset {
-  display: none;
-}
-
-body.has-now-playing #now-playing-fieldset {
   display: flex;
 }
 

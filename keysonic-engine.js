@@ -158,6 +158,9 @@ function applyEngine(mode) {
       : audioService && typeof audioService.setEngine === "function"
       ? audioService.setEngine(mode)
       : "classic";
+  if (resolved === "tone") {
+    audioService?.ensureUnlocked();
+  }
   markPlaybackSettingsDirty();
   try {
     localStorage.setItem(AUDIO_MODE_PREF_KEY, resolved);
@@ -629,6 +632,8 @@ function wirePlaybackEvents() {
 }
 
 function handlePlaybackStarted(snapshot) {
+  handleFirstInteraction();
+  audioService?.ensureToneReady?.();
   clearPlaybackNoteTimers({ stopNotes: true });
   playbackNoteCounter = 0;
   const label = snapshot?.label || "";
@@ -656,6 +661,7 @@ function handlePlaybackStopped() {
 }
 
 function handlePlaybackStep({ code, index, sequence, velocity, durationMs, playbackId }) {
+  handleFirstInteraction();
   const hasDuration = Number.isFinite(durationMs);
   const noteId = hasDuration ? `pb-${playbackId || "seq"}-${playbackNoteCounter++}` : null;
   triggerKey(code, {
@@ -727,6 +733,7 @@ function handleFirstInteraction() {
 
 function handleKeydown(e) {
   if (e.repeat) return;
+  handleFirstInteraction();
 
   const mapped = normalizeEventToCode(e);
   if (!mapped || !keyOrder.includes(mapped)) return;
@@ -1044,6 +1051,8 @@ function startPlaybackFromEntry(entry, { preserveTyped = false } = {}) {
   if (!preserveTyped) {
     resetTypedText();
   }
+  audioService?.ensureToneReady?.();
+  handleFirstInteraction();
   clearSettingsDirty(entry.id);
   if (entry.settings) {
     applyPlaybackSettings(entry.settings);
@@ -1362,17 +1371,21 @@ function playTone(code, opts = {}) {
     durationMs = null,
     noteId = null,
   } = opts;
+  const isTone = audioService?.getAudioMode?.() === "tone";
+  if (fromPlayback && isTone) {
+    audioService.ensureToneReady?.();
+    audioService.ensureUnlocked?.();
+  }
   const freq = getFrequencyForCode(code, degreeOffset);
   if (!freq || !audioService) return;
   const id = noteId || code;
-  if (fromPlayback && Number.isFinite(durationMs)) {
-    audioService.startHeldNote(freq, velocity, id, durationMs);
-    schedulePlaybackNoteStop(id, durationMs);
-  } else if (fromPlayback) {
-    audioService.playFrequency(freq, velocity);
-  } else {
-    audioService.startHeldNote(freq, velocity, id);
+  if (fromPlayback) {
+    const hold = Number.isFinite(durationMs) ? durationMs : null;
+    // Use one-shot playback for reliable output in both engines.
+    audioService.playFrequency(freq, velocity, hold);
+    return;
   }
+  audioService.startHeldNote(freq, velocity, id);
 }
 
 function flashKey(code, { isEcho = false, velocity = null } = {}) {
@@ -1544,12 +1557,12 @@ function exportSongs(selectedIds = null) {
 
   const stamp = buildTimestampLabel();
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json",
+    type: "application/vnd.keysonic+json",
   });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `keysonic-songs-${stamp}.json`;
+  a.download = `keysonic-songs-${stamp}.keysonic`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {

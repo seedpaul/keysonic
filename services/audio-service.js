@@ -37,6 +37,8 @@ export class AudioService {
     this.toneFxChorus = null;
     this.toneFxDelay = null;
     this.toneFxReverb = null;
+    this.toneFxDrive = null;
+    this.toneFxBright = null;
     this.toneVolume =
       this.tone && this.tone.Volume
         ? new this.tone.Volume(-6).toDestination()
@@ -48,6 +50,7 @@ export class AudioService {
     this.toneSamplerPromise = null;
     this.#buildToneSynth(this.instrument);
     this.#prepareToneSampler(this.instrument);
+    this.#tuneToneFxForInstrument(this.instrument);
   }
 
   #clamp(val, min, max) {
@@ -61,6 +64,19 @@ export class AudioService {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+
+  /**
+   * Make sure Tone graph is wired when in tone mode (e.g., after context suspension or late script load).
+   */
+  ensureToneReady() {
+    const mode = this.getAudioMode();
+    if (mode !== 'tone') return mode;
+    // If Tone primitives aren't ready, re-run setAudioMode to rebuild chain.
+    if (!this.tone || !this.toneVolume || !this.toneSynth) {
+      return this.setAudioMode('tone');
+    }
+    return mode;
   }
 
   setVolume(value = 1) {
@@ -153,9 +169,21 @@ export class AudioService {
         this.toneFxReverb.dispose();
       } catch {}
     }
+    if (this.toneFxDrive?.dispose) {
+      try {
+        this.toneFxDrive.dispose();
+      } catch {}
+    }
+    if (this.toneFxBright?.dispose) {
+      try {
+        this.toneFxBright.dispose();
+      } catch {}
+    }
     this.toneFxChorus = null;
     this.toneFxDelay = null;
     this.toneFxReverb = null;
+    this.toneFxDrive = null;
+    this.toneFxBright = null;
   }
 
   #buildToneFxChain() {
@@ -181,7 +209,93 @@ export class AudioService {
   }
 
   #getToneTarget() {
-    return this.toneFxChorus || this.toneFxDelay || this.toneFxReverb || this.toneVolume;
+    return this.toneFxDrive || this.toneFxChorus || this.toneFxDelay || this.toneFxReverb || this.toneVolume;
+  }
+
+  #tuneToneFxForInstrument(preset) {
+    if (this.getAudioMode() !== 'tone') return;
+    const id = preset || this.instrument || 'piano';
+    const chorus = this.toneFxChorus;
+    const delay = this.toneFxDelay;
+    const reverb = this.toneFxReverb;
+    const setSafe = (node, prop, val) => {
+      if (!node) return;
+      // Tone params often expose .value
+      if (node[prop] && typeof node[prop] === 'object' && 'value' in node[prop]) {
+        try {
+          node[prop].value = val;
+          return;
+        } catch {}
+      }
+      if (prop in node && typeof node[prop] !== 'function') {
+        try {
+          node[prop] = val;
+          return;
+        } catch {}
+      }
+      if (node?.set && typeof node.set === 'function') {
+        try {
+          node.set({ [prop]: val });
+        } catch {}
+      }
+    };
+
+    if (id === 'guitar') {
+      setSafe(chorus, 'depth', 0.82);
+      setSafe(chorus, 'wet', 0.7);
+      setSafe(delay, 'feedback', 0.5);
+      setSafe(delay, 'wet', 0.75);
+      setSafe(delay, 'delayTime', '3/16');
+      setSafe(reverb, 'wet', 0.78);
+      setSafe(reverb, 'decay', 4.0);
+      // Guitar-specific drive/bright filters
+      if (!this.toneFxDrive) {
+        try {
+          this.toneFxDrive = new this.tone.Distortion(0.42);
+        } catch {}
+      }
+      if (!this.toneFxBright) {
+        try {
+          this.toneFxBright = new this.tone.Filter(1200, 'highpass', -12);
+        } catch {}
+      }
+      // reconnect drive/bright in case graph changed
+      if (this.toneFxDrive && this.toneFxBright) {
+        try {
+          this.toneFxDrive.disconnect();
+          this.toneFxBright.disconnect();
+        } catch {}
+        const guitarTarget = this.toneFxChorus || this.toneFxDelay || this.toneFxReverb || this.toneVolume;
+        try {
+          this.toneFxDrive.connect(this.toneFxBright);
+          this.toneFxBright.connect(guitarTarget || this.toneVolume);
+        } catch {}
+      }
+    } else if (id === 'piano') {
+      setSafe(chorus, 'depth', 0.35);
+      setSafe(chorus, 'wet', 0.28);
+      setSafe(delay, 'feedback', 0.18);
+      setSafe(delay, 'wet', 0.25);
+      setSafe(delay, 'delayTime', '8n');
+      setSafe(reverb, 'wet', 0.4);
+      setSafe(reverb, 'decay', 2.6);
+      // Ensure no leftover drive/bright on cleaner instruments
+      this.toneFxDrive?.disconnect();
+      this.toneFxBright?.disconnect();
+      this.toneFxDrive = null;
+      this.toneFxBright = null;
+    } else {
+      setSafe(chorus, 'depth', 0.5);
+      setSafe(chorus, 'wet', 0.4);
+      setSafe(delay, 'feedback', 0.3);
+      setSafe(delay, 'wet', 0.38);
+      setSafe(reverb, 'wet', 0.5);
+      setSafe(reverb, 'decay', 3.0);
+      this.toneFxDrive?.disconnect();
+      this.toneFxBright?.disconnect();
+      this.toneFxDrive = null;
+      this.toneFxBright = null;
+    }
   }
 
   #buildToneSynth(preset = 'piano') {
@@ -239,12 +353,45 @@ export class AudioService {
           this.toneOneShot = false;
           break;
         case 'guitar':
-          this.toneSynth = new Tone.PluckSynth({
-            attackNoise: 1.1,
-            dampening: 3200,
-            resonance: 0.95,
-          }).connect(target);
-          this.toneOneShot = true;
+          // Twangy electric: add drive and bright filter before the FX chain
+          if (this.toneFxDrive?.dispose) {
+            try {
+              this.toneFxDrive.dispose();
+            } catch {}
+            this.toneFxDrive = null;
+          }
+          if (this.toneFxBright?.dispose) {
+            try {
+              this.toneFxBright.dispose();
+            } catch {}
+            this.toneFxBright = null;
+          }
+          this.toneFxDrive = new Tone.Distortion(0.38);
+          this.toneFxBright = new Tone.Filter(5400, 'highpass', -12);
+          const guitarTarget = this.toneFxChorus || this.toneFxDelay || this.toneFxReverb || this.toneVolume;
+          this.toneFxDrive.connect(this.toneFxBright);
+          this.toneFxBright.connect(guitarTarget || this.toneVolume);
+
+          this.toneSynth = new Tone.FMSynth({
+            harmonicity: 2.2,
+            modulationIndex: 12,
+            oscillator: { type: 'triangle' },
+            modulation: { type: 'square' },
+            envelope: {
+              attack: 0.002,
+              decay: 0.18,
+              sustain: 0.25,
+              release: 0.9,
+            },
+            modulationEnvelope: {
+              attack: 0.001,
+              decay: 0.16,
+              sustain: 0.15,
+              release: 0.6,
+            },
+            portamento: 0,
+          }).connect(this.toneFxDrive);
+          this.toneOneShot = false;
           break;
         case 'drums':
           this.toneSynth = new Tone.MembraneSynth({
@@ -394,19 +541,19 @@ export class AudioService {
         freqScale: 0.8,
       },
       guitar: {
-        type: 'triangle',
-        attack: 0.004,
-        decay: 0.18,
-        sustain: 0.32,
-        release: 0.24,
+        type: 'sawtooth',
+        attack: 0.002,
+        decay: 0.12,
+        sustain: 0.18,
+        release: 0.8,
         noise: false,
         partials: [
-          { ratio: 2, level: 0.16, type: 'triangle' },
-          { ratio: 3, level: 0.08, type: 'sine' },
-          { ratio: 4, level: 0.04, type: 'triangle' },
+          { ratio: 2, level: 0.22, type: 'square' },
+          { ratio: 3, level: 0.14, type: 'sawtooth' },
+          { ratio: 4, level: 0.1, type: 'triangle' },
         ],
-        filterStart: 1600,
-        filterEnd: 750,
+        filterStart: 4200,
+        filterEnd: 1400,
         freqScale: 1,
       },
       // drum hit: white-noise burst through a falling low-pass for a thumpy splash
@@ -449,6 +596,7 @@ export class AudioService {
     this.toneType = next.toneType || 'sine';
     this.#buildToneSynth(this.instrument);
     this.#prepareToneSampler(this.instrument);
+    this.#tuneToneFxForInstrument(preset);
   }
 
   stopHeldNote(id) {

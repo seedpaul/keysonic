@@ -117,16 +117,21 @@ export class PlaybackService {
               durationMs: item.durationMs,
             }
           : { code: item, settings: playback.settings };
-      const code = payload.code;
-      this.#emit('step', {
-        code,
-        velocity: payload.velocity,
-        settings: payload.settings || playback.settings || null,
-        index,
-        playbackId: playback.id,
-        sequence,
-        durationMs: payload.durationMs,
-      });
+      try {
+        const code = payload.code;
+        this.#emit('step', {
+          code,
+          velocity: payload.velocity,
+          settings: payload.settings || playback.settings || null,
+          index,
+          playbackId: playback.id,
+          sequence,
+          durationMs: payload.durationMs,
+        });
+      } catch (err) {
+        // keep playback moving even if a listener blows up
+        console.error('playback step error', err);
+      }
 
       const nextIdx = playback.reversed ? index - 1 : index + 1;
       const nextEvent = sequence[nextIdx];

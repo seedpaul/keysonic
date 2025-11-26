@@ -134,13 +134,19 @@ body {
 #word-display-container {
   margin-top: 20vh; /* was 26px; now sits clearly below the pill */
   padding-bottom: 20px;
-  width: 100%;
+  width: 96vw;
+  max-width: none;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   gap: 14px;
   box-sizing: border-box;
   height: auto;
+}
+
+.layout-pads #word-display-container {
+  margin-top: 110px;
+  padding-bottom: 0;
 }
 
 .word-block {
@@ -444,40 +450,25 @@ body {
   transform: translateY(-1px);
 }
 
+#pad-grid-container {
+  margin: 14px auto 0;
+}
+
 /* ---------- Pad Grid ---------- */
 
 .pad-grid-shell {
-  margin: 14px auto 0;
-  padding: 12px;
-  border-radius: var(--radius-key);
-  background: var(--panel);
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
-  width: fit-content;
-  max-width: 88vw;
-  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
 }
 
 .pad-grid {
-  --pad-grid-max-h: 55vh;
-  --pad-grid-max-w: 900px;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   grid-template-rows: repeat(8, 1fr);
   gap: 8px;
-  aspect-ratio: 10 / 8;
-  width: min(82vw, var(--pad-grid-max-w), calc(var(--pad-grid-max-h) * 10 / 8));
-  height: min(var(--pad-grid-max-h), calc(82vw * 8 / 10));
-  margin: 0 auto;
-  max-height: var(--pad-grid-max-h);
-}
-
-.layout-pads .pad-grid-shell {
-  max-width: 75vw;
-}
-
-.layout-pads .pad-grid {
-  width: min(72vw, var(--pad-grid-max-w), calc(var(--pad-grid-max-h) * 10 / 8));
-  height: min(var(--pad-grid-max-h), calc(72vw * 8 / 10));
+  width: min(88vw, calc(80vh * 10 / 8));
+  height: min(72vh, calc(88vw * 8 / 10));
+  max-width: 100%;
 }
 
 .pad-cell {
@@ -541,7 +532,7 @@ body {
 
 .layout-pads #wm-controls {
   position: fixed;
-  top: 96px;
+  top: 280px;
   left: 12px;
   right: auto;
   width: clamp(260px, 32vw, 320px);
@@ -572,7 +563,7 @@ body {
 @media (max-width: 640px) {
   .layout-pads #wm-controls {
     width: min(86vw, 240px);
-    top: 82px;
+    top: 220px;
     left: 8px;
     padding: 10px;
     gap: 8px;
@@ -743,6 +734,30 @@ body {
 
   height: 110px; /* reserved band: no layout jump */
   overflow-y: auto;
+}
+
+.layout-pads #wm-saved-grid {
+  position: fixed;
+  top: 280px;
+  right: 12px;
+  left: auto;
+  margin-top: 0;
+  width: clamp(300px, 38vw, 440px);
+  height: auto;
+  max-height: calc(100vh - 240px);
+  padding: 10px 14px;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .layout-pads #wm-saved-grid {
+    top: 220px;
+    right: 8px;
+    width: min(90vw, 300px);
+    max-height: calc(100vh - 190px);
+  }
 }
 
 #saved-select-all {
@@ -1156,7 +1171,7 @@ body {
 @media (max-width: 768px) {
   #word-display-container {
     gap: 8px;
-    width: 98vw;
+    width: 96vw;
   }
 
   .word-block {

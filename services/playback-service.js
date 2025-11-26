@@ -82,7 +82,10 @@ export class PlaybackService {
     if (index < 0 || index >= sequence.length) {
       const shouldLoop = this.#shouldLoop(playback.id);
       if (!shouldLoop) {
-        this.timeoutId = setTimeout(() => this.stop(), 200 / (tempo || 1));
+        const lastItem = playback.reversed ? sequence[0] : sequence[sequence.length - 1];
+        const tailHold = this.#getDurationMs(lastItem);
+        const waitMs = Math.max(200, tailHold != null ? tailHold : 0) / (tempo || 1);
+        this.timeoutId = setTimeout(() => this.stop(), waitMs);
         return;
       }
       this.prevOffsetMs = 0;
@@ -162,6 +165,13 @@ export class PlaybackService {
   #getOffsetMs(item) {
     if (item && typeof item === 'object' && typeof item.offsetMs === 'number') {
       return Math.max(0, item.offsetMs);
+    }
+    return null;
+  }
+
+  #getDurationMs(item) {
+    if (item && typeof item === 'object' && typeof item.durationMs === 'number') {
+      return Math.max(0, item.durationMs);
     }
     return null;
   }

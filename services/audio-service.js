@@ -52,7 +52,7 @@ export class AudioService {
   }
 
   ensureUnlocked() {
-    if (this.audioMode === 'tone' && this.tone && typeof this.tone.start === 'function') {
+    if (this.tone && typeof this.tone.start === 'function') {
       this.tone.start();
     }
     if (this.ctx && this.ctx.state === 'suspended') {
@@ -81,7 +81,24 @@ export class AudioService {
   }
 
   setAudioMode(mode) {
-    const wantsTone = mode === 'tone' && this.tone && this.toneSynth && this.toneVolume;
+    // Lazy-grab Tone/SampleLibrary if the script loaded after this service constructed.
+    if (mode === 'tone' && typeof window !== 'undefined') {
+      if (!this.tone && window.Tone) {
+        this.tone = window.Tone;
+      }
+      if (!this.sampleLibrary && window.SampleLibrary) {
+        this.sampleLibrary = window.SampleLibrary;
+      }
+      if (!this.toneVolume && this.tone?.Volume) {
+        try {
+          this.toneVolume = new this.tone.Volume(-6).toDestination();
+        } catch {
+          this.toneVolume = null;
+        }
+      }
+    }
+
+    const wantsTone = mode === 'tone' && this.tone && this.toneVolume;
     this.engine = wantsTone ? 'tone' : 'classic';
     this.audioMode = this.engine;
     this.stopAllHeldNotes();
@@ -415,29 +432,47 @@ export class AudioService {
     Array.from(this.toneVoices.keys()).forEach((id) => this.stopHeldNote(id));
   }
 
-  startHeldNote(freq, velocity = 1, id = 'note') {
+  startHeldNote(freq, velocity = 1, id = 'note', holdMs = null) {
     if (!freq || !isFinite(freq) || freq <= 0) return;
     if (this.audioMode === 'tone' && this.tone && this.toneSynth) {
       const vel = this.#clamp(Number(velocity) || 1, 0.05, 1.5);
       const effectiveFreq = freq * (Number.isFinite(this.freqScale) ? this.freqScale : 1);
       this.stopHeldNote(id);
       const sampler = this.toneSampler;
-      if (sampler && sampler.triggerAttackRelease && this.tone && this.tone.Frequency) {
+      const holdSec = Number.isFinite(holdMs) && holdMs > 0 ? holdMs / 1000 : null;
+      if (sampler && this.tone && this.tone.Frequency) {
         try {
           const note = this.tone.Frequency(effectiveFreq).toNote();
-          const dur =
-            this.toneOneShot && !this.toneSamplerPromise
-              ? this.attack + this.decay + this.release + 0.2
-              : undefined;
-          sampler.triggerAttackRelease(note, dur, undefined, Math.min(1, vel));
+          const useOneShot = !!this.toneOneShot && !holdSec;
+          if (sampler.triggerAttackRelease && (useOneShot || holdSec)) {
+            const dur =
+              holdSec ??
+              this.attack + this.decay + this.release + 0.2;
+            sampler.triggerAttackRelease(note, dur, undefined, Math.min(1, vel));
+          } else if (sampler.triggerAttack) {
+            sampler.triggerAttack(note, undefined, Math.min(1, vel));
+            this.toneVoices.set(id, {
+              synth: sampler,
+              note,
+              oneShot: !!this.toneOneShot,
+            });
+          }
           return;
         } catch {}
       }
       try {
-        if (this.toneOneShot && this.toneSynth.triggerAttackRelease) {
-          this.toneSynth.triggerAttackRelease(effectiveFreq, undefined, Math.min(1.5, vel));
+        const velClamped = Math.min(1.5, vel);
+        if (this.toneOneShot && !holdSec && this.toneSynth.triggerAttackRelease) {
+          this.toneSynth.triggerAttackRelease(effectiveFreq, undefined, velClamped);
+        } else if (holdSec && this.toneSynth.triggerAttackRelease) {
+          this.toneSynth.triggerAttackRelease(effectiveFreq, holdSec, velClamped);
+          this.toneVoices.set(id, {
+            synth: this.toneSynth,
+            note: effectiveFreq,
+            oneShot: !!this.toneOneShot,
+          });
         } else {
-          this.toneSynth.triggerAttack(effectiveFreq, undefined, Math.min(1.5, vel));
+          this.toneSynth.triggerAttack(effectiveFreq, undefined, velClamped);
           this.toneVoices.set(id, {
             synth: this.toneSynth,
             note: effectiveFreq,

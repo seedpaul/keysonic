@@ -62,7 +62,8 @@ let volumeSlider;
 let volumeValueEl;
 let audioModeSelect;
 let lastKeydownTime = null;
-const keyDownTimes = new Map();
+const playbackNoteStopTimers = new Map();
+let playbackNoteCounter = 0;
 
 let numpadRobotEl = null;
 let numpadRobotEyes = [];
@@ -482,7 +483,7 @@ export function initKeysonic() {
       triggerKey(code);
     },
     onKeyRelease: (code) => {
-      audioService?.stopHeldNote(code);
+      handleKeyRelease(code);
     },
   });
 
@@ -628,6 +629,8 @@ function wirePlaybackEvents() {
 }
 
 function handlePlaybackStarted(snapshot) {
+  clearPlaybackNoteTimers({ stopNotes: true });
+  playbackNoteCounter = 0;
   const label = snapshot?.label || "";
   nowPlayingChars = nowPlayingView.setLabel(label);
   if (snapshot?.sequence?.length) {
@@ -646,13 +649,21 @@ function handlePlaybackStarted(snapshot) {
 }
 
 function handlePlaybackStopped() {
+  clearPlaybackNoteTimers({ stopNotes: true });
   nowPlayingChars = nowPlayingView.setLabel("");
   applyPlaybackCardHighlight();
   updateControls();
 }
 
-function handlePlaybackStep({ code, index, sequence, velocity }) {
-  triggerKey(code, { fromPlayback: true, velocity });
+function handlePlaybackStep({ code, index, sequence, velocity, durationMs, playbackId }) {
+  const hasDuration = Number.isFinite(durationMs);
+  const noteId = hasDuration ? `pb-${playbackId || "seq"}-${playbackNoteCounter++}` : null;
+  triggerKey(code, {
+    fromPlayback: true,
+    velocity,
+    durationMs: hasDuration ? durationMs : null,
+    noteId,
+  });
   highlightPlaybackProgress(index, sequence);
 }
 
@@ -731,7 +742,6 @@ function handleKeydown(e) {
     velocity = 0.3 + t * (1.0 - 0.3);
   }
   lastKeydownTime = now;
-  keyDownTimes.set(mapped, now);
 
   if (
     mapped === "Tab" ||
@@ -746,11 +756,22 @@ function handleKeydown(e) {
   triggerKey(mapped, { velocity, eventTime: now });
 }
 
+function handleKeyRelease(code, eventTime = null) {
+  if (!code || !keyOrder.includes(code)) return;
+  const ts =
+    Number.isFinite(eventTime) && eventTime >= 0
+      ? eventTime
+      : typeof performance !== "undefined" && performance.now
+      ? performance.now()
+      : Date.now();
+  recordingService.recordKeyRelease(code, { eventTime: ts });
+  audioService?.stopHeldNote(code);
+}
+
 function handleKeyup(e) {
   const mapped = normalizeEventToCode(e);
   if (!mapped) return;
-  keyDownTimes.delete(mapped);
-  audioService?.stopHeldNote(mapped);
+  handleKeyRelease(mapped);
 }
 
 function handleRecordClick() {
@@ -1008,6 +1029,7 @@ function buildPlaybackSequence(entry) {
       code: ev.code,
       offsetMs: Math.max(0, Number(ev.offsetMs) || 0),
       ...(Number.isFinite(ev.velocity) ? { velocity: Number(ev.velocity) } : {}),
+      ...(Number.isFinite(ev.durationMs) ? { durationMs: Number(ev.durationMs) } : {}),
       ...(entry.settings ? { settings: entry.settings } : {}),
     }));
   }
@@ -1333,13 +1355,23 @@ function resetKeyboardShadow() {
 }
 
 function playTone(code, opts = {}) {
-  const { degreeOffset = 0, velocity = null, fromPlayback = false } = opts;
+  const {
+    degreeOffset = 0,
+    velocity = null,
+    fromPlayback = false,
+    durationMs = null,
+    noteId = null,
+  } = opts;
   const freq = getFrequencyForCode(code, degreeOffset);
   if (!freq || !audioService) return;
-  if (fromPlayback) {
+  const id = noteId || code;
+  if (fromPlayback && Number.isFinite(durationMs)) {
+    audioService.startHeldNote(freq, velocity, id, durationMs);
+    schedulePlaybackNoteStop(id, durationMs);
+  } else if (fromPlayback) {
     audioService.playFrequency(freq, velocity);
   } else {
-    audioService.startHeldNote(freq, velocity, code);
+    audioService.startHeldNote(freq, velocity, id);
   }
 }
 
@@ -1413,7 +1445,16 @@ function parseCodeToken(rawCode) {
   return out;
 }
 
-function triggerKey(rawCode, { fromPlayback = false, velocity = null, eventTime = null } = {}) {
+function triggerKey(
+  rawCode,
+  {
+    fromPlayback = false,
+    velocity = null,
+    eventTime = null,
+    durationMs = null,
+    noteId = null,
+  } = {}
+) {
   const parsed = parseCodeToken(rawCode);
   const code = parsed.code;
 
@@ -1439,7 +1480,13 @@ function triggerKey(rawCode, { fromPlayback = false, velocity = null, eventTime 
   // - action keys light up their own key
   // - space (" ") lights the spacebar
   // - echo hits can walk the bass (degreeOffset) and get special visuals
-  playTone(code, { degreeOffset: parsed.degreeOffset, velocity, fromPlayback });
+  playTone(code, {
+    degreeOffset: parsed.degreeOffset,
+    velocity,
+    fromPlayback,
+    durationMs,
+    noteId,
+  });
   flashKey(code, { isEcho: parsed.isEcho, velocity });
 }
 
@@ -1617,6 +1664,12 @@ function importSongPack(data) {
       Array.isArray(raw.sequence) && raw.sequence.length
         ? raw.sequence
         : recordingRepo.toDisplaySequence(playSeq);
+    const timedEvents =
+      Array.isArray(raw.timedEvents) && raw.timedEvents.length
+        ? raw.timedEvents
+        : Array.isArray(raw.playbackSequence) && raw.playbackSequence.length
+        ? raw.playbackSequence
+        : null;
 
     const baseName = raw.name || "Recording";
     const name = recordingRepo.makeUniqueName(baseName, next);
@@ -1625,10 +1678,7 @@ function importSongPack(data) {
       name,
       playSequence: playSeq,
       displaySequence: displaySeq,
-      timedEvents:
-        Array.isArray(raw.timedEvents) && raw.timedEvents.length
-          ? raw.timedEvents
-          : undefined,
+      timedEvents: timedEvents || undefined,
       settings: raw.settings || undefined,
     });
 
@@ -1920,6 +1970,9 @@ function buildSongExportFromEntry(entry, playbackSequence) {
     };
     if (parsed.degreeOffset) ev.degreeOffset = parsed.degreeOffset;
     if (parsed.isEcho) ev.echo = true;
+    if (rawCode && typeof rawCode === "object" && Number.isFinite(rawCode.durationMs)) {
+      ev.durationMs = Math.max(0, Math.round(rawCode.durationMs));
+    }
 
     events.push(ev);
   }
@@ -1935,6 +1988,29 @@ function buildSongExportFromEntry(entry, playbackSequence) {
     stepNoteValue: SONG_STEP_NOTE_VALUE,
     events,
   };
+}
+
+function schedulePlaybackNoteStop(noteId, durationMs) {
+  if (!noteId || !Number.isFinite(durationMs)) return;
+  const tempo = getState().tempo || 1;
+  const delayMs = Math.max(0, durationMs) / (tempo || 1);
+  const existing = playbackNoteStopTimers.get(noteId);
+  if (existing) clearTimeout(existing);
+  const timeoutId = setTimeout(() => {
+    playbackNoteStopTimers.delete(noteId);
+    audioService?.stopHeldNote(noteId);
+  }, delayMs);
+  playbackNoteStopTimers.set(noteId, timeoutId);
+}
+
+function clearPlaybackNoteTimers({ stopNotes = false } = {}) {
+  playbackNoteStopTimers.forEach((timeoutId, noteId) => {
+    clearTimeout(timeoutId);
+    if (stopNotes) {
+      audioService?.stopHeldNote(noteId);
+    }
+  });
+  playbackNoteStopTimers.clear();
 }
 
 

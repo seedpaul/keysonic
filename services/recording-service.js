@@ -70,7 +70,9 @@ class RecordingService {
 
   recordKeyRelease(code, meta = {}) {
     const state = store.getState();
-    if (!state.isRecording || state.isPlayingBack) return;
+    if (state.isPlayingBack) return;
+    // If we never saw a keydown for this code, skip to avoid stray release events.
+    if (!this._downTimes.has(code)) return;
     const now =
       Number.isFinite(meta.eventTime) && meta.eventTime >= 0
         ? meta.eventTime
@@ -84,6 +86,7 @@ class RecordingService {
     const downAt = this._downTimes.get(code);
     const durationMs =
       Number.isFinite(downAt) && downAt <= now ? Math.max(1, Math.round(now - downAt)) : undefined;
+    this._downTimes.delete(code);
 
     store.mutate((draft) => {
       for (let i = draft.recordedEvents.length - 1; i >= 0; i--) {
@@ -93,6 +96,9 @@ class RecordingService {
           return;
         }
       }
+      // Only append a new release event while actively recording; when not recording
+      // we just skip to avoid duplicating typed notes.
+      if (!state.isRecording) return;
       draft.recordedEvents.push({
         code,
         offsetMs,
@@ -116,6 +122,7 @@ class RecordingService {
     }
     const offsetMs = Math.max(0, Math.round(now - this._startTime));
     const velocity = Number.isFinite(meta.velocity) ? meta.velocity : undefined;
+    this._downTimes.set(code, now);
 
     store.mutate((draft) => {
       draft.typedText += ch;

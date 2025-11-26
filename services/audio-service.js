@@ -34,6 +34,9 @@ export class AudioService {
     this.toneRelease = 0.08;
     this.toneType = 'sine';
     this.toneVoices = new Map();
+    this.toneFxChorus = null;
+    this.toneFxDelay = null;
+    this.toneFxReverb = null;
     this.toneVolume =
       this.tone && this.tone.Volume
         ? new this.tone.Volume(-6).toDestination()
@@ -103,8 +106,11 @@ export class AudioService {
     this.audioMode = this.engine;
     this.stopAllHeldNotes();
     if (wantsTone) {
+      this.#buildToneFxChain();
       this.#buildToneSynth(this.instrument);
       this.#prepareToneSampler(this.instrument);
+    } else {
+      this.#disposeToneFx();
     }
     return this.engine;
   }
@@ -131,6 +137,53 @@ export class AudioService {
     this.toneOneShot = false;
   }
 
+  #disposeToneFx() {
+    if (this.toneFxChorus?.dispose) {
+      try {
+        this.toneFxChorus.dispose();
+      } catch {}
+    }
+    if (this.toneFxDelay?.dispose) {
+      try {
+        this.toneFxDelay.dispose();
+      } catch {}
+    }
+    if (this.toneFxReverb?.dispose) {
+      try {
+        this.toneFxReverb.dispose();
+      } catch {}
+    }
+    this.toneFxChorus = null;
+    this.toneFxDelay = null;
+    this.toneFxReverb = null;
+  }
+
+  #buildToneFxChain() {
+    if (!this.tone || !this.toneVolume) {
+      this.#disposeToneFx();
+      return;
+    }
+    this.#disposeToneFx();
+    try {
+      this.toneFxChorus = new this.tone.Chorus(5, 2.8, 0.5).start();
+      this.toneFxDelay = new this.tone.PingPongDelay({
+        delayTime: '8n',
+        feedback: 0.28,
+        wet: 0.38,
+      });
+      this.toneFxReverb = new this.tone.Reverb({ decay: 3.2, wet: 0.6 });
+      this.toneFxChorus.connect(this.toneFxDelay);
+      this.toneFxDelay.connect(this.toneFxReverb);
+      this.toneFxReverb.connect(this.toneVolume);
+    } catch {
+      this.#disposeToneFx();
+    }
+  }
+
+  #getToneTarget() {
+    return this.toneFxChorus || this.toneFxDelay || this.toneFxReverb || this.toneVolume;
+  }
+
   #buildToneSynth(preset = 'piano') {
     if (!this.tone || !this.toneVolume) {
       this.toneSynth = null;
@@ -139,6 +192,7 @@ export class AudioService {
     }
     this.#disposeToneSynth();
     const Tone = this.tone;
+    const target = this.#getToneTarget() || this.toneVolume;
     const mode = preset || 'piano';
     try {
       switch (mode) {
@@ -160,7 +214,7 @@ export class AudioService {
               sustain: 0.6,
               release: 0.3,
             },
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = false;
           break;
         case 'bass':
@@ -181,7 +235,7 @@ export class AudioService {
               sustain: this.sustain || 0.7,
               release: this.release || 0.32,
             },
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = false;
           break;
         case 'guitar':
@@ -189,7 +243,7 @@ export class AudioService {
             attackNoise: 1.1,
             dampening: 3200,
             resonance: 0.95,
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = true;
           break;
         case 'drums':
@@ -203,7 +257,7 @@ export class AudioService {
               sustain: 0.01,
               release: 0.5,
             },
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = true;
           break;
         case 'legacy':
@@ -215,7 +269,7 @@ export class AudioService {
               sustain: this.sustain || 0.55,
               release: this.release || 0.2,
             },
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = false;
           break;
         case 'piano':
@@ -237,7 +291,7 @@ export class AudioService {
               baseFrequency: 800,
               octaves: 4,
             },
-          }).connect(this.toneVolume);
+          }).connect(target);
           this.toneOneShot = false;
           break;
       }
@@ -275,7 +329,8 @@ export class AudioService {
         .then((obj) => {
           const sampler = obj?.[name];
           if (sampler && sampler.connect) {
-            sampler.connect(this.toneVolume);
+            const target = this.#getToneTarget() || this.toneVolume;
+            sampler.connect(target);
             this.toneSampler = sampler;
           }
         })

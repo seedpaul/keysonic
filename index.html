@@ -13,17 +13,14 @@
       <div id="word-music-subtitle">Every sentence is a song.</div>
     </div>
 
-    <!-- Typed / Now Playing / Save Typed -->
+        <!-- Typed / Now Playing / Save Typed -->
     <div id="word-display-container">
-      <fieldset id="typed-fieldset" class="word-block">
-        <legend>Spell a Song</legend>
-        <div id="typed-text"></div>
-        <button id="typed-backspace-btn" class="typed-backspace-btn" type="button" title="Backspace" aria-label="Backspace Spell a Song" > ⌫ </button>
-      </fieldset>
-
-      <fieldset id="now-playing-fieldset" class="word-block">
-        <legend>Now Playing</legend>
-        <div id="now-playing"></div>
+      <fieldset id="typed-fieldset" class="word-block dual-display">
+        <legend id="display-legend">Spell a Song</legend>
+        <div class="dual-row single-line">
+          <div id="display-text" class="line-segment"></div>
+          <button id="typed-backspace-btn" class="typed-backspace-btn" type="button" title="Backspace" aria-label="Backspace Spell a Song">⌫</button>
+        </div>
       </fieldset>
     </div>
 
@@ -137,6 +134,16 @@
     <script type="module" src="keysonic.js"></script>
   </body>
 </html>
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -7,9 +7,10 @@ export function getDomRefs() {
   const numpadContainer = document.getElementById('keyboard-numpad');
   const keyboardWrapper = document.querySelector('.keyboard-wrapper');
   const padGridContainer = document.getElementById('pad-grid-container');
+  const displayLegend = document.getElementById('display-legend');
   const controlsToggle = document.getElementById('controls-toggle');
-  const typedTextEl = document.getElementById('typed-text');
-  const nowPlayingEl = document.getElementById('now-playing');
+  const typedTextEl = document.getElementById('display-text');
+  const nowPlayingEl = typedTextEl;
   const savedGridEl = document.getElementById('wm-saved-grid');
   const actionMenuToggle = document.getElementById('action-menu-toggle');
   const actionMenuList = document.getElementById('action-menu-list');
@@ -40,6 +41,7 @@ export function getDomRefs() {
     numpadContainer,
     keyboardWrapper,
     padGridContainer,
+    displayLegend,
     controlsToggle,
     typedTextEl,
     nowPlayingEl,

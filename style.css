@@ -148,7 +148,7 @@ body {
   min-width: 0;
   max-width: none;
   height: auto;
-  padding: 6px 10px;
+  padding: 4px 8px;
   margin: 0;
 
   display: flex;
@@ -162,14 +162,39 @@ body {
   box-shadow: var(--panel-shadow);
 }
 
-#typed-text,
-#now-playing {
-  width: 100%;
-  min-height: 28px;
-  box-sizing: border-box;
+.dual-display {
+  gap: 6px;
 }
-#typed-fieldset,
-#now-playing-fieldset {
+
+.dual-display .dual-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  height: 32px;
+  justify-content: center;
+}
+
+.line-segment {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.typed-backspace-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+#typed-fieldset {
   flex: 1 1 0;
   min-width: 0;
   max-width: 100%;
@@ -236,26 +261,14 @@ body {
 }
 
 #typed-text,
-#now-playing {
+#display-text {
   font-size: 14px;
-  line-height: 1.4;
-  min-height: 1.2em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  white-space: pre-wrap;
+  line-height: 1.25;
 }
 
-#typed-text {
-  font-size: 18px; /* match now-playing base size */
+#display-text {
+  font-size: 18px; /* match previous now-playing base size */
   font-weight: 700; /* bold */
-}
-
-/* Show both info blocks */
-#typed-fieldset,
-#now-playing-fieldset {
-  display: flex;
 }
 
 /* Now Playing styling */

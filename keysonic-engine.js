@@ -39,6 +39,7 @@ let mainRowsContainer;
 let numpadContainer;
 let keyboardWrapperEl;
 let padGridContainer;
+let displayLegend;
 let controlsToggleBtn;
 let recordBtn;
 let stopBtn;
@@ -357,6 +358,7 @@ export function initKeysonic() {
     numpadContainer,
     keyboardWrapper: keyboardWrapperEl,
     padGridContainer,
+    displayLegend,
     controlsToggle: controlsToggleBtn,
     typedTextEl,
     nowPlayingEl,
@@ -518,6 +520,9 @@ export function initKeysonic() {
   applyBaseKeyColors();
   setupLayoutSwitcher();
   setupControlsToggle();
+  setDisplayLegend("Spell a Song");
+  // Use one shared display for typed and now-playing.
+  nowPlayingEl = typedTextEl;
   wireAudioUnlock();
   wireKeyboardEvents();
   wireControlEvents();
@@ -840,13 +845,22 @@ function setupControlsToggle() {
   });
 }
 
+function setDisplayLegend(text) {
+  if (displayLegend) {
+    displayLegend.textContent = text || "Spell a Song";
+  }
+}
+
 
 function handlePlaybackStarted(snapshot) {
   handleFirstInteraction();
   audioService?.ensureToneReady?.();
   clearPlaybackNoteTimers({ stopNotes: true });
   playbackNoteCounter = 0;
-  const label = snapshot?.label || "";
+  document.body.classList.add("is-playing-back");
+  setDisplayLegend("Now Playing");
+  const state = getState();
+  const label = snapshot?.label || state?.typedText || "";
   nowPlayingChars = nowPlayingView.setLabel(label);
   if (snapshot?.sequence?.length) {
     const seqForTint = snapshot.sequence.map((s) =>
@@ -866,6 +880,9 @@ function handlePlaybackStarted(snapshot) {
 function handlePlaybackStopped() {
   clearPlaybackNoteTimers({ stopNotes: true });
   nowPlayingChars = nowPlayingView.setLabel("");
+  document.body.classList.remove("is-playing-back");
+  setDisplayLegend("Spell a Song");
+  syncTypedDisplay();
   applyPlaybackCardHighlight();
   updateControls();
 }
@@ -1388,6 +1405,7 @@ function updateTypedTextForUserKey(code, meta = {}) {
 function syncTypedDisplay() {
   if (!typedTextView) return;
   const state = getState();
+  if (state?.isPlayingBack) return;
   typedTextView.render(
     state.typedText,
     state.typedCodeSequence,

@@ -17,6 +17,7 @@ export function getDomRefs() {
   const menuImportBtn = document.getElementById('menu-import');
   const menuExportBtn = document.getElementById('menu-export');
   const menuThemeBtn = document.getElementById('menu-theme');
+  const menuFullscreenBtn = document.getElementById('menu-fullscreen-toggle');
   const exportModal = document.getElementById('export-modal');
   const exportList = document.getElementById('export-list');
   const exportModalClose = document.getElementById('export-modal-close');
@@ -58,6 +59,7 @@ export function getDomRefs() {
     menuImportBtn,
     menuExportBtn,
     menuThemeBtn,
+    menuFullscreenBtn,
     exportModal,
     exportList,
     exportModalClose,

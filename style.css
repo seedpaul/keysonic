@@ -523,6 +523,11 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 14px;
   box-shadow: var(--panel-shadow);
+  position: relative;
+}
+
+.panel-hide-btn {
+  margin-left: auto;
 }
 
 .controls-collapsed #wm-controls {
@@ -548,7 +553,7 @@ body {
   max-height: calc(100vh - 140px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  padding: 12px 16px 12px 12px;
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
@@ -583,9 +588,26 @@ body {
   width: 100%;
 }
 
+.layout-pads #wm-controls .tempo-label,
+.layout-pads #wm-controls .volume-label,
+.layout-pads #wm-controls .scale-label,
+.layout-pads #wm-controls .instrument-label,
+.layout-pads #wm-controls .theme-label {
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.layout-pads #wm-controls .tempo-label input[type="range"],
+.layout-pads #wm-controls .volume-label input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+/* pad-mode hide button shares base positioning */
+
 #wm-controls button {
   padding: 10px 22px;
-  min-height: 44px;
 
   border-radius: var(--radius-key);
   border: 1px solid var(--control-border);
@@ -606,7 +628,6 @@ body {
   background-color: var(--control-hover-bg);
   border-color: var(--control-hover-border);
   box-shadow: var(--panel-shadow-strong);
-  transform: translateY(-1px);
 }
 
 #wm-controls button:disabled {
@@ -740,12 +761,14 @@ body {
   gap: 10px;
   padding: 6px 32px;
   box-sizing: border-box;
-
-  height: 110px; /* reserved band: no layout jump */
   overflow-y: auto;
+  width: 100%;
+}
+.saved-grid-panel {
+  position: relative;
 }
 
-.layout-pads #wm-saved-grid {
+.layout-pads .saved-grid-panel {
   position: fixed;
   top: 280px;
   right: 12px;
@@ -755,18 +778,48 @@ body {
   height: auto;
   max-height: calc(100vh - 240px);
   padding: 10px 14px;
+  overflow: visible;
+}
+
+.layout-pads #wm-saved-grid {
   justify-content: flex-start;
   align-items: stretch;
   overflow-y: auto;
 }
 
 @media (max-width: 640px) {
-  .layout-pads #wm-saved-grid {
+  .layout-pads .saved-grid-panel {
     top: 220px;
     right: 8px;
     width: min(90vw, 300px);
     max-height: calc(100vh - 190px);
   }
+}
+
+.panel-hide-btn {
+  width: auto;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--border-soft);
+  background: var(--panel-strong);
+  color: var(--muted-strong);
+  cursor: pointer;
+  box-shadow: var(--panel-shadow);
+  line-height: 1;
+  box-sizing: border-box;
+  transition: background-color var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.panel-hide-btn:hover {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+  color: var(--text);
 }
 
 #saved-select-all {
@@ -1270,7 +1323,6 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: 16px;
 
   padding: 8px 12px;
   min-height: 44px;
@@ -1303,7 +1355,6 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: 16px;
 
   padding: 8px 12px;
   min-height: 44px;
@@ -1338,7 +1389,6 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: 16px;
 
   padding: 8px 12px;
   min-height: 44px;
@@ -1385,7 +1435,10 @@ body {
   transform: translateX(var(--dx, 0px)) translateY(0);
 
   animation: note-float-up 1.2s ease-out forwards;
-  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45),
+    -1px 0 1px rgba(0, 0, 0, 0.75),
+    1px 0 1px rgba(0, 0, 0, 0.75),
+    0 -1px 1px rgba(0, 0, 0, 0.75);
 }
 
 /* Echo hits: bigger, brighter, and glowy */

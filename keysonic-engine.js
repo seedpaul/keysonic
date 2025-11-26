@@ -59,6 +59,7 @@ let exportModalExport;
 let menuImportBtn;
 let menuExportBtn;
 let menuThemeBtn;
+let menuFullscreenBtn;
 let exportSelectAllToggle;
 
 let nowPlayingChars = [];
@@ -374,6 +375,7 @@ export function initKeysonic() {
     menuImportBtn,
     menuExportBtn,
     menuThemeBtn,
+    menuFullscreenBtn,
     exportModal,
     exportList,
     exportModalClose,
@@ -620,6 +622,9 @@ function wireControlEvents() {
       }
     });
   }
+  if (menuFullscreenBtn) {
+    menuFullscreenBtn.addEventListener("click", toggleFullscreen);
+  }
   if (exportModalClose) {
     exportModalClose.addEventListener("click", closeExportModal);
   }
@@ -647,6 +652,9 @@ function wireControlEvents() {
   if (savedGridEl) {
     savedGridEl.addEventListener("click", handleSavedGridClick);
   }
+  document.querySelectorAll(".panel-hide-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setControlsCollapsed(true));
+  });
 }
 
 function wirePlaybackEvents() {
@@ -833,15 +841,46 @@ function setBodyLayoutClass(layoutMode) {
   body.classList.toggle("layout-pads", layoutMode === "pads");
 }
 
+function setControlsCollapsed(collapsed) {
+  const shouldCollapse = !!collapsed;
+  document.body.classList.toggle("controls-collapsed", shouldCollapse);
+  if (controlsToggleBtn) {
+    controlsToggleBtn.textContent = shouldCollapse ? "Show Controls" : "Hide Controls";
+    controlsToggleBtn.setAttribute("aria-expanded", shouldCollapse ? "false" : "true");
+  }
+  if (shouldCollapse) {
+    toggleActionMenu(true);
+  }
+}
+
+function toggleFullscreen() {
+  toggleActionMenu(true);
+  const doc = document;
+  const docEl = doc.documentElement;
+  const inFullscreen =
+    doc.fullscreenElement ||
+    doc.webkitFullscreenElement ||
+    doc.mozFullScreenElement ||
+    doc.msFullscreenElement;
+
+  if (inFullscreen) {
+    if (doc.exitFullscreen) doc.exitFullscreen();
+    else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+    else if (doc.mozCancelFullScreen) doc.mozCancelFullScreen();
+    else if (doc.msExitFullscreen) doc.msExitFullscreen();
+  } else {
+    if (docEl.requestFullscreen) docEl.requestFullscreen();
+    else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+    else if (docEl.mozRequestFullScreen) docEl.mozRequestFullScreen();
+    else if (docEl.msRequestFullscreen) docEl.msRequestFullscreen();
+  }
+}
+
 function setupControlsToggle() {
   if (!controlsToggleBtn) return;
   controlsToggleBtn.addEventListener("click", () => {
-    const collapsed = document.body.classList.toggle("controls-collapsed");
-    controlsToggleBtn.textContent = collapsed ? "Show Controls" : "Hide Controls";
-    controlsToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    if (collapsed) {
-      toggleActionMenu(true);
-    }
+    const collapsed = document.body.classList.contains("controls-collapsed");
+    setControlsCollapsed(!collapsed);
   });
 }
 
@@ -2017,7 +2056,17 @@ function spawnNoteParticleForKey(code, opts = {}) {
   const glyph = getNoteGlyphForCode(code);
   if (!glyph) return;
 
-  els.forEach((keyEl) => {
+  const visibleEls =
+    Array.isArray(els) && els.length
+      ? els.filter((el) => {
+          const r = el?.getBoundingClientRect();
+          return r && r.width > 0 && r.height > 0;
+        })
+      : [];
+
+  const targetEls = visibleEls.length ? visibleEls : els;
+
+  targetEls.forEach((keyEl) => {
     let rect = keyEl.getBoundingClientRect();
 
     // Note color based on key's hue

@@ -13,6 +13,8 @@ import {
   TypedTextView,
 } from "./keysonic-layout.js";
 
+import { createPadGrid } from "./components/pad-grid.js";
+
 import { getFrequencyForIndex, SCALES } from "./keysonic-scales.js";
 
 import {
@@ -35,6 +37,9 @@ let keyboardEls = [];
 
 let mainRowsContainer;
 let numpadContainer;
+let keyboardWrapperEl;
+let padGridContainer;
+let controlsToggleBtn;
 let recordBtn;
 let stopBtn;
 let clearBtn;
@@ -61,6 +66,7 @@ let tempoValueEl;
 let volumeSlider;
 let volumeValueEl;
 let audioModeSelect;
+let layoutSelect;
 let lastKeydownTime = null;
 const playbackNoteStopTimers = new Map();
 let playbackNoteCounter = 0;
@@ -81,9 +87,16 @@ const SCALE_PREF_KEY = "keysonic-scale-pref-v1";
 const INSTRUMENT_PREF_KEY = "keysonic-instrument-pref-v1";
 const VOLUME_PREF_KEY = "keysonic-volume-pref-v1";
 const AUDIO_MODE_PREF_KEY = "keysonic-audio-mode-pref-v1";
+const LAYOUT_PREF_KEY = "keysonic-layout-mode-pref-v1";
 const SONG_STEP_NOTE_VALUE = "eighth"; // all events = 1/8 note by definition
+const PAD_GRID_ROWS = 8;
+const PAD_GRID_COLS = 10;
 let themeSelect;
 let instrumentSelect;
+let currentLayoutMode = "keyboard";
+let padGridInstance = null;
+let padKeyElements = {};
+let padGridShadowHost = null;
 
 const DEFAULT_KEY_COLOR_SETTINGS = {
   saturation: 55,
@@ -342,6 +355,9 @@ export function initKeysonic() {
   ({
     mainRowsContainer,
     numpadContainer,
+    keyboardWrapper: keyboardWrapperEl,
+    padGridContainer,
+    controlsToggle: controlsToggleBtn,
     typedTextEl,
     nowPlayingEl,
     savedGridEl,
@@ -352,6 +368,7 @@ export function initKeysonic() {
     importFileInput,
     actionMenuToggle,
     actionMenuList,
+    layoutSelect,
     menuImportBtn,
     menuExportBtn,
     menuThemeBtn,
@@ -499,6 +516,8 @@ export function initKeysonic() {
   typedTextView = new TypedTextView(typedTextEl);
 
   applyBaseKeyColors();
+  setupLayoutSwitcher();
+  setupControlsToggle();
   wireAudioUnlock();
   wireKeyboardEvents();
   wireControlEvents();
@@ -630,6 +649,197 @@ function wirePlaybackEvents() {
   playbackService.on("stop", handlePlaybackStopped);
   playbackService.on("step", handlePlaybackStep);
 }
+
+function setupLayoutSwitcher() {
+  let savedLayout = "keyboard";
+  try {
+    const stored = localStorage.getItem(LAYOUT_PREF_KEY);
+    if (stored === "pads" || stored === "keyboard") {
+      savedLayout = stored;
+    }
+  } catch (err) {
+    // ignore storage failures
+  }
+  currentLayoutMode = savedLayout;
+
+  if (layoutSelect) {
+    layoutSelect.value = savedLayout;
+    layoutSelect.addEventListener("change", () => {
+      applyLayout(layoutSelect.value);
+    });
+  }
+
+  applyLayout(savedLayout);
+}
+
+function applyLayout(nextLayout) {
+  const resolved = nextLayout === "pads" ? "pads" : "keyboard";
+  currentLayoutMode = resolved;
+  if (layoutSelect && layoutSelect.value !== resolved) {
+    layoutSelect.value = resolved;
+  }
+
+  try {
+    localStorage.setItem(LAYOUT_PREF_KEY, resolved);
+  } catch (err) {
+    // ignore storage failures
+  }
+
+  setBodyLayoutClass(resolved);
+
+  if (resolved === "pads") {
+    hideKeyboardLayout();
+    showPadLayout();
+  } else {
+    hidePadLayout();
+    showKeyboardLayout();
+  }
+}
+
+function showKeyboardLayout() {
+  if (keyboardWrapperEl) {
+    keyboardWrapperEl.style.display = "";
+    keyboardWrapperEl.removeAttribute("aria-hidden");
+  }
+}
+
+function hideKeyboardLayout() {
+  if (keyboardWrapperEl) {
+    keyboardWrapperEl.style.display = "none";
+    keyboardWrapperEl.setAttribute("aria-hidden", "true");
+  }
+}
+
+function showPadLayout() {
+  if (padGridContainer) {
+    padGridContainer.hidden = false;
+  }
+  renderPadGrid();
+}
+
+function hidePadLayout() {
+  if (padGridContainer) {
+    padGridContainer.hidden = true;
+  }
+  destroyPadGrid();
+}
+
+function renderPadGrid() {
+  if (!padGridContainer || padGridInstance) {
+    if (padGridContainer) padGridContainer.hidden = false;
+    attachPadGridShadowHost(padGridInstance?.gridEl || padGridContainer);
+    return;
+  }
+
+  padGridInstance = createPadGrid({
+    container: padGridContainer,
+    rows: PAD_GRID_ROWS,
+    cols: PAD_GRID_COLS,
+    getCodeForIndex: getPadCodeForIndex,
+    getHueForCode: (code) => getHueForCode(code),
+    onPadDown: ({ index, code, el }) => {
+      const resolved = code || getPadCodeForIndex(index);
+      if (!resolved) return;
+      if (el) el.dataset.padHeld = "1";
+      handleFirstInteraction();
+      const now =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+      triggerKey(resolved, { eventTime: now });
+    },
+    onPadUp: ({ index, code, el }) => {
+      const resolved = code || getPadCodeForIndex(index);
+      if (el) {
+        el.dataset.padHeld = "0";
+        resetPadElement(el);
+      }
+      if (!resolved) return;
+      const now =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+      handleKeyRelease(resolved, now);
+    },
+  });
+
+  registerPadKeyElements(padGridInstance?.cells || []);
+  attachPadGridShadowHost(padGridInstance?.gridEl || padGridContainer);
+  applyBaseKeyColors();
+}
+
+function destroyPadGrid() {
+  detachPadGridShadowHost();
+  removePadKeyElements();
+  if (padGridInstance?.destroy) {
+    padGridInstance.destroy();
+  }
+  padGridInstance = null;
+}
+
+function registerPadKeyElements(cells) {
+  padKeyElements = {};
+  if (!Array.isArray(cells)) return;
+  cells.forEach(({ code, el }) => {
+    if (!code || !el) return;
+    if (!keyElements[code]) keyElements[code] = [];
+    keyElements[code].push(el);
+    if (!padKeyElements[code]) padKeyElements[code] = [];
+    padKeyElements[code].push(el);
+  });
+}
+
+function removePadKeyElements() {
+  if (!padKeyElements || !keyElements) return;
+  Object.entries(padKeyElements).forEach(([code, els]) => {
+    if (!Array.isArray(keyElements[code])) return;
+    keyElements[code] = keyElements[code].filter((el) => !els.includes(el));
+    if (!keyElements[code].length) {
+      delete keyElements[code];
+    }
+  });
+  padKeyElements = {};
+}
+
+function attachPadGridShadowHost(el) {
+  if (!el) return;
+  padGridShadowHost = el;
+  if (!keyboardEls.includes(el)) {
+    keyboardEls = [...keyboardEls, el];
+  }
+}
+
+function detachPadGridShadowHost() {
+  if (padGridShadowHost) {
+    keyboardEls = keyboardEls.filter((el) => el !== padGridShadowHost);
+  }
+  padGridShadowHost = null;
+}
+
+function getPadCodeForIndex(idx) {
+  if (!Array.isArray(keyOrder) || !keyOrder.length) return null;
+  if (!Number.isInteger(idx) || idx < 0) return null;
+  return keyOrder[idx % keyOrder.length] || null;
+}
+
+function setBodyLayoutClass(layoutMode) {
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle("layout-pads", layoutMode === "pads");
+}
+
+function setupControlsToggle() {
+  if (!controlsToggleBtn) return;
+  controlsToggleBtn.addEventListener("click", () => {
+    const collapsed = document.body.classList.toggle("controls-collapsed");
+    controlsToggleBtn.textContent = collapsed ? "Show Controls" : "Hide Controls";
+    controlsToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    if (collapsed) {
+      toggleActionMenu(true);
+    }
+  });
+}
+
 
 function handlePlaybackStarted(snapshot) {
   handleFirstInteraction();
@@ -1304,12 +1514,45 @@ function getToneColor(hue) {
     : `hsl(${h}, ${toneSaturation}%, ${toneLightness}%)`;
 }
 
+function getPadBaseColor(hue) {
+  return getBaseKeyColor(hue);
+}
+
+function getPadBorderColor(hue) {
+  return getBaseKeyBorder(hue);
+}
+
 function getActiveKeyColor(hue) {
   const { activeSaturation, activeLightness } = keyColorSettings;
   const h = mapHue(hue);
   return isNaN(h)
     ? "var(--key)"
     : `hsl(${h}, ${activeSaturation}%, ${activeLightness}%)`;
+}
+
+function getActivePadColor(hue) {
+  return getActiveKeyColor(hue);
+}
+
+function getBaseColorForEl(el, hue) {
+  if (el?.classList?.contains("pad-cell")) {
+    return getPadBaseColor(hue);
+  }
+  return getBaseKeyColor(hue);
+}
+
+function getBorderColorForEl(el, hue) {
+  if (el?.classList?.contains("pad-cell")) {
+    return getPadBorderColor(hue);
+  }
+  return getBaseKeyBorder(hue);
+}
+
+function getActiveColorForEl(el, hue) {
+  if (el?.classList?.contains("pad-cell")) {
+    return getActivePadColor(hue);
+  }
+  return getActiveKeyColor(hue);
 }
 
 function getFrequencyForCode(code, degreeOffset = 0) {
@@ -1341,10 +1584,20 @@ function applyBaseKeyColors() {
   Object.values(keyElements).forEach((els) => {
     els.forEach((el) => {
       const hue = parseFloat(el.dataset.hue);
-      el.style.backgroundColor = getBaseKeyColor(hue);
-      el.style.borderColor = getBaseKeyBorder(hue);
+      el.style.backgroundColor = getBaseColorForEl(el, hue);
+      el.style.borderColor = getBorderColorForEl(el, hue);
     });
   });
+}
+
+function resetPadElement(el) {
+  if (!el) return;
+  el.classList.remove("active", "pad-cell--active", "pad-cell--held");
+  const h = parseFloat(el.dataset.hue);
+  el.style.backgroundColor = getBaseColorForEl(el, h);
+  el.style.borderColor = getBorderColorForEl(el, h);
+  el.style.transform = "";
+  el.style.filter = "";
 }
 
 function setKeyboardShadowHue(hue) {
@@ -1393,10 +1646,10 @@ function flashKey(code, { isEcho = false, velocity = null } = {}) {
   if (!els || !els.length) return;
 
   const hue = parseFloat(els[0].dataset.hue);
-  const activeBg = getActiveKeyColor(hue);
+  const hueForShadow = isNaN(hue) ? null : hue;
 
-  if (!isNaN(hue)) {
-    setKeyboardShadowHue(hue);
+  if (!isNaN(hueForShadow)) {
+    setKeyboardShadowHue(hueForShadow);
   }
 
   const vel = Number.isFinite(velocity) ? velocity : 1;
@@ -1404,7 +1657,12 @@ function flashKey(code, { isEcho = false, velocity = null } = {}) {
   const brightAmt = 1 + Math.min(0.25, Math.max(0, (vel - 0.3) * 0.35));
 
   els.forEach((el) => {
+    const elHue = parseFloat(el.dataset.hue);
+    const activeBg = getActiveColorForEl(el, elHue);
     el.classList.add("active");
+    if (el.classList.contains("pad-cell")) {
+      el.classList.add("pad-cell--active");
+    }
     el.style.backgroundColor = activeBg;
     el.style.transform = `scale(${scaleAmt})`;
     el.style.filter = `brightness(${brightAmt})`;
@@ -1415,10 +1673,16 @@ function flashKey(code, { isEcho = false, velocity = null } = {}) {
 
   setTimeout(() => {
     els.forEach((el) => {
+      if (el.dataset.padHeld === "1") {
+        return;
+      }
       el.classList.remove("active");
+      if (el.classList.contains("pad-cell")) {
+        el.classList.remove("pad-cell--active");
+      }
       const h = parseFloat(el.dataset.hue);
-      el.style.backgroundColor = getBaseKeyColor(h);
-      el.style.borderColor = getBaseKeyBorder(h);
+      el.style.backgroundColor = getBaseColorForEl(el, h);
+      el.style.borderColor = getBorderColorForEl(el, h);
       el.style.transform = "";
       el.style.filter = "";
     });

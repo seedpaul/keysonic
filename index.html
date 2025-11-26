@@ -35,6 +35,7 @@
         </div>
         <div id="keyboard-numpad" class="keyboard"></div>
       </div>
+      <div id="pad-grid-container" class="pad-grid-shell" hidden></div>
     </div>
 
     <!-- Controls -->
@@ -42,14 +43,22 @@
       <div id="action-menu">
         <button id="action-menu-toggle" aria-label="Open menu">☰</button>
         <div id="action-menu-list" hidden>
-        <button type="button" id="menu-import">Import Songs</button>
-        <button type="button" id="menu-export">Export Songs</button>
-        <div class="menu-theme-row">
-          <label for="theme-select">Theme</label>
-          <select id="theme-select"></select>
+          <button type="button" id="menu-import">Import Songs</button>
+          <button type="button" id="menu-export">Export Songs</button>
+          <div class="menu-theme-row">
+            <label for="theme-select">Theme</label>
+            <select id="theme-select"></select>
+          </div>
+          <div class="menu-theme-row">
+            <label for="layout-select">Layout</label>
+            <select id="layout-select">
+              <option value="keyboard" selected>Keyboard</option>
+              <option value="pads">Pad Grid</option>
+            </select>
+          </div>
+          <button type="button" id="controls-toggle" aria-expanded="true">Hide Controls</button>
         </div>
       </div>
-    </div>
       <button data-action="record" id="record-btn">Record</button>
       <button data-action="stop" id="stop-btn">Stop</button>
       <button data-action="clear" id="clear-btn">Clear</button>
@@ -128,3 +137,5 @@
     <script type="module" src="keysonic.js"></script>
   </body>
 </html>
+
+

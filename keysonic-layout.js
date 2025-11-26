@@ -5,6 +5,9 @@ export function getDomRefs() {
   const wmControls = document.getElementById('wm-controls');
   const mainRowsContainer = document.getElementById('keyboard-main-rows');
   const numpadContainer = document.getElementById('keyboard-numpad');
+  const keyboardWrapper = document.querySelector('.keyboard-wrapper');
+  const padGridContainer = document.getElementById('pad-grid-container');
+  const controlsToggle = document.getElementById('controls-toggle');
   const typedTextEl = document.getElementById('typed-text');
   const nowPlayingEl = document.getElementById('now-playing');
   const savedGridEl = document.getElementById('wm-saved-grid');
@@ -28,12 +31,16 @@ export function getDomRefs() {
   const importBtn = document.getElementById('import-btn');
   const importFileInput = document.getElementById('import-file-input');
   const audioModeSelect = document.getElementById('audio-mode-select');
+  const layoutSelect = document.getElementById('layout-select');
 
   return {
     titleEl,
     wmControls,
     mainRowsContainer,
     numpadContainer,
+    keyboardWrapper,
+    padGridContainer,
+    controlsToggle,
     typedTextEl,
     nowPlayingEl,
     savedGridEl,
@@ -43,6 +50,7 @@ export function getDomRefs() {
     saveTypedBtn,
     importFileInput,
     audioModeSelect,
+    layoutSelect,
     actionMenuToggle,
     actionMenuList,
     menuImportBtn,
